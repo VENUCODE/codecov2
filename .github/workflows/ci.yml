@@ -1,55 +1,17 @@
 name: API workflow
 
 on:
-  push:
-    branches: [ main ]  # Trigger on pushes to main branch
-  pull_request:
-    branches: [ main ]  # Trigger on PRs targeting main branch
-  issue_comment:
-    types: [created]  # Trigger when comments are created on PRs/issues
+  push:  # Trigger on pushes to any branch
+  pull_request:  # Trigger on PRs targeting any branch
 
 jobs:
   build:
     runs-on: ubuntu-latest
     name: Test python API
-    # Only run if: push to main, PR opened/updated, or exact comment trigger
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' && github.event.comment.body == '@tars_test_changes')
     steps:
-    - name: Check if triggered by comment
-      id: check_comment
-      if: github.event_name == 'issue_comment'
-      run: |
-        COMMENT_BODY="${{ github.event.comment.body }}"
-        # Trim whitespace and check for exact match
-        TRIMMED=$(echo "$COMMENT_BODY" | xargs)
-        if [[ "$TRIMMED" == "@tars_test_changes" ]]; then
-          echo "triggered_by_comment=true" >> $GITHUB_OUTPUT
-          echo "✅ Workflow triggered by exact comment: @tars_test_changes"
-        else
-          echo "triggered_by_comment=false" >> $GITHUB_OUTPUT
-          echo "ℹ️ Comment '$TRIMMED' does not match '@tars_test_changes'"
-        fi
-    - name: Get PR branch (for comment triggers)
-      if: github.event_name == 'issue_comment'
-      id: get_pr_branch
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const pr = await github.rest.pulls.get({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: context.issue.number
-          });
-          core.setOutput('branch', pr.data.head.ref);
-          core.setOutput('sha', pr.data.head.sha);
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Fetch full history for Codecov to calculate patch coverage
-        ref: ${{ github.event_name == 'issue_comment' && steps.get_pr_branch.outputs.sha || github.ref }}
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
@@ -61,13 +23,9 @@ jobs:
       run: |
         pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml || true
     - name: Upload coverage reports to Codecov
-      # Upload coverage on PRs, main branch pushes, and comment-triggered runs
+      # Upload coverage on both PRs and main branch pushes
       # Codecov intelligently handles PR coverage (shows patch coverage) vs main branch (project coverage)
-      if: |
-        always() && 
-        (github.event_name == 'push' || 
-         github.event_name == 'pull_request' || 
-         (github.event_name == 'issue_comment' && steps.check_comment.outputs.triggered_by_comment == 'true'))
+      if: always()
       uses: codecov/codecov-action@v5
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -75,14 +33,10 @@ jobs:
       with:
         fail_ci_if_error: false
         files: ./coverage.xml
-        flags: ${{ github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && steps.check_comment.outputs.triggered_by_comment == 'true') && 'pr' || 'main' }}
+        flags: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
     - name: Upload test results to Codecov
-      # Upload test results for PRs, main branch, and comment-triggered runs
-      if: |
-        always() && !cancelled() &&
-        (github.event_name == 'push' || 
-         github.event_name == 'pull_request' || 
-         (github.event_name == 'issue_comment' && steps.check_comment.outputs.triggered_by_comment == 'true'))
+      # Upload test results for both PRs and main branch
+      if: always() && !cancelled()
       uses: codecov/codecov-action@v5
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -122,11 +76,9 @@ jobs:
           echo "❌ Coverage report not found"
           exit 1
         fi
-    - name: Display coverage summary (PRs and comment-triggered)
-      # Show coverage summary for PRs and comment-triggered runs (informational only, threshold not enforced)
-      if: |
-        github.event_name == 'pull_request' || 
-        (github.event_name == 'issue_comment' && steps.check_comment.outputs.triggered_by_comment == 'true')
+    - name: Display coverage summary (PRs)
+      # Show coverage summary for PRs (informational only, threshold not enforced)
+      if: github.event_name == 'pull_request'
       run: |
         if [ -f coverage.xml ]; then
           python << 'EOF'
@@ -139,29 +91,9 @@ jobs:
             print(f'📊 Current overall coverage: {coverage:.2f}%')
             print(f'📝 Codecov will show patch coverage (coverage of changed lines) in PR comments')
             print(f'ℹ️ Coverage threshold (70%) is only enforced when merging to main branch')
-            if '${{ github.event_name }}' == 'issue_comment':
-                print(f'✅ Tests triggered by comment: @tars_test_changes')
         except Exception as e:
             print(f'⚠️ Error reading coverage: {e}')
         EOF
         else
           echo "⚠️ Coverage report not found - tests may have failed before generating coverage"
         fi
-    - name: Comment on PR (comment-triggered runs)
-      # Post a comment back on the PR when triggered by comment
-      if: github.event_name == 'issue_comment' && steps.check_comment.outputs.triggered_by_comment == 'true'
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const comment = `✅ Tests triggered by comment: @tars_test_changes
-          
-          📊 Test results and coverage have been calculated and uploaded to Codecov.
-          Check the workflow run for detailed results.`;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
