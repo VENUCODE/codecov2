@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from app.models import MathRequest, MathResponse, SingleNumberRequest, HealthResponse
-from app.utils import validate_division, calculate_percentage, round_to_precision, factorial, get_statistics
+from app.utils import validate_division, calculate_percentage, round_to_precision, factorial, get_statistics, is_even, format_number
 from app.errors import MathError
 import math
 
@@ -104,4 +104,18 @@ def statistics(numbers: list[float]) -> dict:
     """Calculate statistics for a list of numbers."""
     stats = get_statistics(numbers)
     return stats
+
+
+@app.get("/is_even/{number}")
+def check_even(number: int):
+    """Check if a number is even."""
+    result = is_even(number)
+    return {"number": number, "is_even": result}
+
+
+@app.get("/format/{number}")
+def format_number_endpoint(number: float):
+    """Format a number with commas."""
+    formatted = format_number(number)
+    return {"original": number, "formatted": formatted}
 
