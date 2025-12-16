@@ -474,61 +474,57 @@ class TestStatisticsEndpoint:
         assert response.status_code == 422
 
 
-# class TestIsEvenEndpoint:
-#     """Test cases for the /is_even/{number} endpoint."""
-#     
-#     def test_is_even_positive_even(self):
-#         """Test is_even endpoint with positive even number."""
-#         response = client.get("/is_even/4")
-#         assert response.status_code == 200
-#         assert response.json() == {"number": 4, "is_even": True}
-#     
-#     def test_is_even_positive_odd(self):
-#         """Test is_even endpoint with positive odd number."""
-#         response = client.get("/is_even/5")
-#         assert response.status_code == 200
-#         assert response.json() == {"number": 5, "is_even": False}
-#     
-#     def test_is_even_zero(self):
-#         """Test is_even endpoint with zero."""
-#         response = client.get("/is_even/0")
-#         assert response.status_code == 200
-#         assert response.json() == {"number": 0, "is_even": True}
-#     
-#     def test_is_even_negative(self):
-#         """Test is_even endpoint with negative number."""
-#         response = client.get("/is_even/-2")
-#         assert response.status_code == 200
-#         assert response.json() == {"number": -2, "is_even": True}
-# 
-# Tests commented out to demonstrate missing coverage for /is_even endpoint
+class TestIsEvenEndpoint:
+    """Test cases for the /is_even/{number} endpoint."""
+    
+    def test_is_even_positive_even(self):
+        """Test is_even endpoint with positive even number."""
+        response = client.get("/is_even/4")
+        assert response.status_code == 200
+        assert response.json() == {"number": 4, "is_even": True}
+    
+    def test_is_even_positive_odd(self):
+        """Test is_even endpoint with positive odd number."""
+        response = client.get("/is_even/5")
+        assert response.status_code == 200
+        assert response.json() == {"number": 5, "is_even": False}
+    
+    def test_is_even_zero(self):
+        """Test is_even endpoint with zero."""
+        response = client.get("/is_even/0")
+        assert response.status_code == 200
+        assert response.json() == {"number": 0, "is_even": True}
+    
+    def test_is_even_negative(self):
+        """Test is_even endpoint with negative number."""
+        response = client.get("/is_even/-2")
+        assert response.status_code == 200
+        assert response.json() == {"number": -2, "is_even": True}
 
 
-# class TestFormatNumberEndpoint:
-#     """Test cases for the /format/{number} endpoint."""
-#     
-#     def test_format_positive_number(self):
-#         """Test format endpoint with positive number."""
-#         response = client.get("/format/1234.56")
-#         assert response.status_code == 200
-#         assert response.json() == {"original": 1234.56, "formatted": "1,234.56"}
-#     
-#     def test_format_negative_number(self):
-#         """Test format endpoint with negative number."""
-#         response = client.get("/format/-1234.56")
-#         assert response.status_code == 200
-#         assert response.json() == {"original": -1234.56, "formatted": "-1,234.56"}
-#     
-#     def test_format_small_number(self):
-#         """Test format endpoint with small number."""
-#         response = client.get("/format/42")
-#         assert response.status_code == 200
-#         assert response.json() == {"original": 42.0, "formatted": "42.00"}
-#     
-#     def test_format_decimal_number(self):
-#         """Test format endpoint with decimal number."""
-#         response = client.get("/format/0.5")
-#         assert response.status_code == 200
-#         assert response.json() == {"original": 0.5, "formatted": "0.50"}
-# 
-# Tests commented out to demonstrate missing coverage for /format endpoint
+class TestFormatNumberEndpoint:
+    """Test cases for the /format/{number} endpoint."""
+    
+    def test_format_positive_number(self):
+        """Test format endpoint with positive number."""
+        response = client.get("/format/1234.56")
+        assert response.status_code == 200
+        assert response.json() == {"original": 1234.56, "formatted": "1,234.56"}
+    
+    def test_format_negative_number(self):
+        """Test format endpoint with negative number."""
+        response = client.get("/format/-1234.56")
+        assert response.status_code == 200
+        assert response.json() == {"original": -1234.56, "formatted": "-1,234.56"}
+    
+    def test_format_small_number(self):
+        """Test format endpoint with small number."""
+        response = client.get("/format/42")
+        assert response.status_code == 200
+        assert response.json() == {"original": 42.0, "formatted": "42.00"}
+    
+    def test_format_decimal_number(self):
+        """Test format endpoint with decimal number."""
+        response = client.get("/format/0.5")
+        assert response.status_code == 200
+        assert response.json() == {"original": 0.5, "formatted": "0.50"}

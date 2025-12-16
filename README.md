@@ -1,6 +1,6 @@
 # FastAPI Math Operations API
 
-A simple REST API built with FastAPI that provides basic math operations: addition, subtraction, and multiplication .
+A simple REST API built with FastAPI that provides basic math operations: addition, subtraction, and multiplication.
 
 ## Features
 
