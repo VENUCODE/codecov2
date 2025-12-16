@@ -37,6 +37,8 @@ comment:
   require_changes: false
   require_base: no
   require_head: yes
+  # Show patch coverage (coverage of changed lines) in PR comments
+  # This helps developers see coverage impact of their changes
 
 ignore:
   - "tests/"

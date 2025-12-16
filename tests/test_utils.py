@@ -89,14 +89,15 @@ class TestIsEven:
 class TestFactorial:
     """Test cases for factorial function."""
     
-    def test_factorial_positive(self):
-        """Test factorial with positive numbers."""
-        assert factorial(0) == 1
-        assert factorial(1) == 1
-        assert factorial(2) == 2
-        assert factorial(3) == 6
-        assert factorial(4) == 24
-        assert factorial(5) == 120
+    # def test_factorial_positive(self):
+    #     """Test factorial with positive numbers."""
+    #     assert factorial(0) == 1
+    #     assert factorial(1) == 1
+    #     assert factorial(2) == 2
+    #     assert factorial(3) == 6
+    #     assert factorial(4) == 24
+    #     assert factorial(5) == 120
+    # Test commented out to demonstrate missing coverage
     
     def test_factorial_negative(self):
         """Test factorial with negative number raises ValueError."""

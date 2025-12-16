@@ -8,7 +8,7 @@ A simple REST API built with FastAPI that provides basic math operations: additi
 - **Subtract**: Subtract two numbers
 - **Multiply**: Multiply two numbers
 - Comprehensive test coverage with pytest
-
+   
 ## Setup
 
 ### Prerequisites

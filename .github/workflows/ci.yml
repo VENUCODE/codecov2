@@ -1,13 +1,23 @@
 name: API workflow
 
-on: [push, pull_request]
+on:
+  push:  # Trigger on pushes to any branch
+  pull_request:  # Trigger on PRs targeting any branch
+    types: [opened, synchronize, reopened]  # Only on PR open, update, or reopen (not on every comment/event)
 
 jobs:
   build:
     runs-on: ubuntu-latest
     name: Test python API
+    # Skip push events on branches that have open PRs (to avoid duplicate runs)
+    # Only run push events on main branch or branches without open PRs
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for Codecov to calculate patch coverage
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
@@ -19,6 +29,8 @@ jobs:
       run: |
         pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml || true
     - name: Upload coverage reports to Codecov
+      # Upload coverage on both PRs and main branch pushes
+      # Codecov intelligently handles PR coverage (shows patch coverage) vs main branch (project coverage)
       if: always()
       uses: codecov/codecov-action@v5
       env:
@@ -27,7 +39,9 @@ jobs:
       with:
         fail_ci_if_error: false
         files: ./coverage.xml
+        flags: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
     - name: Upload test results to Codecov
+      # Upload test results for both PRs and main branch
       if: always() && !cancelled()
       uses: codecov/codecov-action@v5
       env:
@@ -37,8 +51,40 @@ jobs:
         report_type: test_results
         files: ./junit.xml
         fail_ci_if_error: false
-    - name: Display coverage summary
-      if: always()
+    - name: Check coverage threshold (main branch only)
+      # Only enforce coverage threshold on main branch pushes, not on PRs
+      # PRs will show patch coverage in Codecov comments, but won't block merge
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        if [ -f coverage.xml ]; then
+          python << 'EOF'
+        import xml.etree.ElementTree as ET
+        import sys
+        
+        try:
+            tree = ET.parse('coverage.xml')
+            root = tree.getroot()
+            coverage = float(root.attrib.get('line-rate', 0)) * 100
+            print(f'Current coverage: {coverage:.2f}%')
+            print(f'Required coverage: 70%')
+            
+            if coverage < 70:
+                print(f'❌ Coverage {coverage:.2f}% is below the required 70% threshold')
+                print(f'⚠️ This will block merging to main branch')
+                sys.exit(1)
+            else:
+                print(f'✅ Coverage {coverage:.2f}% meets the required 70% threshold')
+        except Exception as e:
+            print(f'❌ Error checking coverage: {e}')
+            sys.exit(1)
+        EOF
+        else
+          echo "❌ Coverage report not found"
+          exit 1
+        fi
+    - name: Display coverage summary (PRs)
+      # Show coverage summary for PRs (informational only, threshold not enforced)
+      if: github.event_name == 'pull_request'
       run: |
         if [ -f coverage.xml ]; then
           python << 'EOF'
@@ -48,15 +94,9 @@ jobs:
             tree = ET.parse('coverage.xml')
             root = tree.getroot()
             coverage = float(root.attrib.get('line-rate', 0)) * 100
-            print(f'Current coverage: {coverage:.2f}%')
-            print(f'Coverage range: 70% - 100%')
-            
-            if coverage < 70:
-                print(f'⚠️ Coverage {coverage:.2f}% is below 70%')
-            elif coverage > 100:
-                print(f'⚠️ Coverage {coverage:.2f}% exceeds 100%')
-            else:
-                print(f'✅ Coverage {coverage:.2f}% is within acceptable range')
+            print(f'📊 Current overall coverage: {coverage:.2f}%')
+            print(f'📝 Codecov will show patch coverage (coverage of changed lines) in PR comments')
+            print(f'ℹ️ Coverage threshold (70%) is only enforced when merging to main branch')
         except Exception as e:
             print(f'⚠️ Error reading coverage: {e}')
         EOF

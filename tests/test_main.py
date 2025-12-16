@@ -206,11 +206,12 @@ class TestDivideEndpoint:
 class TestPowerEndpoint:
     """Test cases for the /power endpoint."""
     
-    def test_power_positive_numbers(self):
-        """Test power with positive numbers."""
-        response = client.post("/power", json={"a": 2, "b": 3})
-        assert response.status_code == 200
-        assert response.json() == {"result": 8.0}
+    # def test_power_positive_numbers(self):
+    #     """Test power with positive numbers."""
+    #     response = client.post("/power", json={"a": 2, "b": 3})
+    #     assert response.status_code == 200
+    #     assert response.json() == {"result": 8.0}
+    # Test commented out to demonstrate missing coverage
     
     def test_power_negative_base(self):
         """Test power with negative base."""
@@ -448,15 +449,16 @@ class TestStatisticsEndpoint:
         assert data["max"] == 3.5
         assert abs(data["sum"] - 7.5) < 0.0001
     
-    def test_statistics_empty_list(self):
-        """Test statistics with empty list."""
-        response = client.post("/statistics", json=[])
-        assert response.status_code == 200
-        data = response.json()
-        assert data["mean"] == 0
-        assert data["min"] == 0
-        assert data["max"] == 0
-        assert data["sum"] == 0
+    # def test_statistics_empty_list(self):
+    #     """Test statistics with empty list."""
+    #     response = client.post("/statistics", json=[])
+    #     assert response.status_code == 200
+    #     data = response.json()
+    #     assert data["mean"] == 0
+    #     assert data["min"] == 0
+    #     assert data["max"] == 0
+    #     assert data["sum"] == 0
+    # Test commented out to demonstrate missing coverage
     
     def test_statistics_single_number(self):
         """Test statistics with single number."""
