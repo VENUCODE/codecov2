@@ -64,28 +64,26 @@ class TestRoundToPrecision:
         assert round_to_precision(3.14159, 4) == 3.1416
 
 
-# class TestIsEven:
-#     """Test cases for is_even function."""
-#     
-#     def test_is_even_positive(self):
-#         """Test is_even with positive numbers."""
-#         assert is_even(2) is True
-#         assert is_even(4) is True
-#         assert is_even(1) is False
-#         assert is_even(3) is False
-#     
-#     def test_is_even_negative(self):
-#         """Test is_even with negative numbers."""
-#         assert is_even(-2) is True
-#         assert is_even(-4) is True
-#         assert is_even(-1) is False
-#         assert is_even(-3) is False
-#     
-#     def test_is_even_zero(self):
-#         """Test is_even with zero."""
-#         assert is_even(0) is True
-# 
-# Tests commented out to demonstrate missing coverage for is_even function
+class TestIsEven:
+    """Test cases for is_even function."""
+    
+    def test_is_even_positive(self):
+        """Test is_even with positive numbers."""
+        assert is_even(2) is True
+        assert is_even(4) is True
+        assert is_even(1) is False
+        assert is_even(3) is False
+    
+    def test_is_even_negative(self):
+        """Test is_even with negative numbers."""
+        assert is_even(-2) is True
+        assert is_even(-4) is True
+        assert is_even(-1) is False
+        assert is_even(-3) is False
+    
+    def test_is_even_zero(self):
+        """Test is_even with zero."""
+        assert is_even(0) is True
 
 
 class TestFactorial:
@@ -108,24 +106,22 @@ class TestFactorial:
             factorial(-5)
 
 
-# class TestFormatNumber:
-#     """Test cases for format_number function."""
-#     
-#     def test_format_number_positive(self):
-#         """Test formatting positive numbers."""
-#         assert format_number(1234.56) == "1,234.56"
-#         assert format_number(1000.0) == "1,000.00"
-#     
-#     def test_format_number_negative(self):
-#         """Test formatting negative numbers."""
-#         assert format_number(-1234.56) == "-1,234.56"
-#     
-#     def test_format_number_small(self):
-#         """Test formatting small numbers."""
-#         assert format_number(0.5) == "0.50"
-#         assert format_number(42) == "42.00"
-# 
-# Tests commented out to demonstrate missing coverage for format_number function
+class TestFormatNumber:
+    """Test cases for format_number function."""
+    
+    def test_format_number_positive(self):
+        """Test formatting positive numbers."""
+        assert format_number(1234.56) == "1,234.56"
+        assert format_number(1000.0) == "1,000.00"
+    
+    def test_format_number_negative(self):
+        """Test formatting negative numbers."""
+        assert format_number(-1234.56) == "-1,234.56"
+    
+    def test_format_number_small(self):
+        """Test formatting small numbers."""
+        assert format_number(0.5) == "0.50"
+        assert format_number(42) == "42.00"
 
 
 class TestGetStatistics:
