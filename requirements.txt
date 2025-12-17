@@ -4,5 +4,5 @@ pytest==7.4.3
 pytest-cov==4.1.0
 httpx==0.25.2
 mutpy==0.6.1
-cosmic-ray==10.0.0
+cosmic-ray==8.4.3
 
