@@ -261,13 +261,14 @@ class TestModuloEndpoint:
         """Test modulo with negative dividend."""
         response = client.post("/modulo", json={"a": -10, "b": 3})
         assert response.status_code == 200
-        assert response.json() == {"result": -1.0}
+        assert response.json() == {"result": 2.0}  # Python's modulo: -10 % 3 = 2
     
     def test_modulo_decimal_numbers(self):
         """Test modulo with decimal numbers."""
         response = client.post("/modulo", json={"a": 10.5, "b": 3.2})
         assert response.status_code == 200
-        assert abs(response.json()["result"] - 1.0) < 0.1
+        # Python's modulo: 10.5 % 3.2 = 0.8999999999999995 (approximately 0.9)
+        assert abs(response.json()["result"] - 0.9) < 0.1
     
     def test_modulo_by_zero(self):
         """Test modulo by zero."""

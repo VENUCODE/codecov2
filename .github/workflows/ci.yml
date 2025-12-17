@@ -103,3 +103,76 @@ jobs:
         else
           echo "⚠️ Coverage report not found - tests may have failed before generating coverage"
         fi
+    - name: Generate Cosmic Ray configuration
+      # Generate mutation testing config dynamically
+      if: always() && !cancelled()
+      run: |
+        echo "⚙️ Generating Cosmic Ray configuration..."
+        cat > cosmic_ray_config.toml << 'EOF'
+        [cosmic-ray]
+        module-path = "app"
+        timeout = 10.0
+        excluded-modules = []
+        test-command = "pytest tests"
+        
+        [cosmic-ray.distributor]
+        name = "local"
+        EOF
+        echo "✅ Configuration file created: cosmic_ray_config.toml"
+        cat cosmic_ray_config.toml
+    - name: Run mutation testing baseline
+      # Ensure tests pass before mutation testing
+      if: always() && !cancelled()
+      run: |
+        echo "🧪 Running mutation testing baseline..."
+        cosmic-ray --verbosity=INFO baseline cosmic_ray_config.toml || {
+          echo "❌ Baseline tests failed - mutation testing cannot proceed"
+          exit 1
+        }
+        echo "✅ Baseline passed - tests work correctly without mutations"
+    - name: Initialize mutation testing session
+      # Create session with all mutations to test
+      if: always() && !cancelled()
+      run: |
+        echo "🔬 Initializing mutation testing session..."
+        cosmic-ray init cosmic_ray_config.toml mutation_session.sqlite || {
+          echo "❌ Failed to initialize mutation session"
+          exit 1
+        }
+        echo "✅ Mutation session initialized"
+    - name: Run mutation testing
+      # Execute mutation tests
+      if: always() && !cancelled()
+      run: |
+        echo "🧬 Running mutation testing..."
+        cosmic-ray exec cosmic_ray_config.toml mutation_session.sqlite || {
+          echo "⚠️ Some mutations may have failed, but continuing to generate report..."
+        }
+        echo "✅ Mutation testing completed"
+    - name: Generate mutation test report
+      # Generate and display mutation test results
+      if: always() && !cancelled()
+      run: |
+        echo "📊 Mutation Testing Results:"
+        echo "================================"
+        cr-report mutation_session.sqlite --show-pending || {
+          echo "⚠️ Failed to generate report"
+          exit 0
+        }
+        echo ""
+        echo "📈 Generating HTML report..."
+        cr-html mutation_session.sqlite > mutation_report.html || {
+          echo "⚠️ Failed to generate HTML report"
+        }
+        if [ -f mutation_report.html ]; then
+          echo "✅ HTML report generated: mutation_report.html"
+        fi
+    - name: Upload mutation test report
+      # Upload mutation test HTML report as artifact
+      if: always() && !cancelled()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mutation-test-report
+        path: mutation_report.html
+        retention-days: 30
+        if-no-files-found: ignore

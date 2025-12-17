@@ -1,6 +1,6 @@
 """Tests for utility functions."""
 
-import pytest
+import pytest  # pyright: ignore[reportMissingImports]
 from app.utils import (
     validate_division,
     calculate_percentage,
