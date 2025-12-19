@@ -12,6 +12,10 @@ jobs:
   test-and-report:
     runs-on: ubuntu-latest
     name: Run Tests and Publish Reports
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     
     steps:
       - name: Checkout code
