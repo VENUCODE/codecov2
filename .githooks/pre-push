@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Pre-push Git hook
+# Runs tests before allowing push to remote repository
+#
+# This hook prevents pushing code that fails tests locally.
+# Note: This can be bypassed with --no-verify flag.
+# CI/CD branch protection provides the real enforcement layer.
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${YELLOW}Running pre-push hook: Testing before push...${NC}"
+echo ""
+
+# Check if pytest is available
+if ! command -v pytest &> /dev/null; then
+    echo -e "${RED}ERROR: pytest is not installed or not in PATH${NC}"
+    echo "Please install dependencies: pip install -r requirements.txt"
+    exit 1
+fi
+
+# Check if virtual environment is activated (optional but recommended)
+if [ -z "$VIRTUAL_ENV" ] && [ ! -f "venv/bin/activate" ] && [ ! -f ".venv/bin/activate" ]; then
+    echo -e "${YELLOW}WARNING: No virtual environment detected. Consider using a venv.${NC}"
+fi
+
+# Run tests
+echo "Running pytest..."
+if pytest --cov=app --cov-report=term; then
+    echo ""
+    echo -e "${GREEN}✓ All tests passed! Proceeding with push...${NC}"
+    exit 0
+else
+    echo ""
+    echo -e "${RED}✗ Tests failed! Push aborted.${NC}"
+    echo ""
+    echo "Please fix the failing tests before pushing."
+    echo "You can bypass this hook with: git push --no-verify"
+    echo "However, CI/CD will still block merges if tests fail."
+    exit 1
+fi
+
