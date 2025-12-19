@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest-ctrf
+          pip install pytest-json-ctrf
 
       - name: Run tests and generate reports
         id: test
@@ -36,7 +36,7 @@ jobs:
           # Create ctrf directory for CTRF reports
           mkdir -p ctrf
           # Run tests with both JUnit XML and CTRF JSON output
-          pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml --ctrf-report-dir=./ctrf || true
+          pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json || true
 
       - name: Publish Test Results
         if: always()
