@@ -44,7 +44,7 @@ jobs:
         with:
           files: junit.xml
           check_name: 'Test Results'
-          comment_mode: create_new
+          comment_mode: always
           report_individual_runs: true
           deduplicate_classes_by_file_name: true
 
