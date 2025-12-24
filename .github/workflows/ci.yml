@@ -1,8 +1,8 @@
 name: Codecov Coverage Workflow
 
 on:
-  push:  # Trigger on pushes to any branch
-  pull_request:  # Trigger on PRs targeting any branch
+  push: 
+  pull_request: 
     types: [opened, synchronize, reopened]  # Only on PR open, update, or reopen (not on every comment/event)
 
 jobs:
