@@ -1,0 +1,67 @@
+name: Test Reporting
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test-and-report:
+    runs-on: ubuntu-latest
+    name: Run Tests and Publish Reports
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest-json-ctrf
+
+      - name: Run tests and generate reports
+        id: test
+        continue-on-error: true
+        run: |
+          # Create ctrf directory for CTRF reports
+          mkdir -p ctrf
+          # Run tests with both JUnit XML and CTRF JSON output
+          pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json || true
+
+      - name: Publish Test Results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: junit.xml
+          check_name: 'Test Results'
+          comment_mode: always
+          report_individual_runs: true
+          deduplicate_classes_by_file_name: true
+
+      - name: Publish Test Report with GitHub Test Reporter
+        if: always()
+        uses: ctrf-io/github-test-reporter@v1
+        with:
+          report-path: './ctrf/*.json'
+          github-report: true
+          summary-report: true
+          test-report: true
+          failed-report: true
+          upload-artifact: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GHUB_TOKEN }}
+

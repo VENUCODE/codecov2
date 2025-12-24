@@ -7,13 +7,11 @@ on:
 
 jobs:
   build:
+    if: false  # Workflow disabled - using test-reporting.yml instead
     runs-on: ubuntu-latest
     name: Test python API
     # Skip push events on branches that have open PRs (to avoid duplicate runs)
     # Only run push events on main branch or branches without open PRs
-    if: |
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     steps:
     - uses: actions/checkout@v4
       with:
