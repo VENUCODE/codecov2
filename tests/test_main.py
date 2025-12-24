@@ -34,7 +34,7 @@ class TestAddEndpoint:
         """Test addition with positive numbers."""
         response = client.post("/add", json={"a": 10, "b": 5})
         assert response.status_code == 200
-        assert response.json() == {"result": 20}  # Intentionally wrong to test failure reporting
+        assert response.json() == {"result": 15}
     
     def test_add_negative_numbers(self):
         """Test addition with negative numbers."""
@@ -122,7 +122,7 @@ class TestMultiplyEndpoint:
         """Test multiplication with positive numbers."""
         response = client.post("/multiply", json={"a": 10, "b": 5})
         assert response.status_code == 200
-        assert response.json() == {"result": 100}  # Intentionally wrong to test failure reporting
+        assert response.json() == {"result": 50}
     
     def test_multiply_negative_numbers(self):
         """Test multiplication with negative numbers."""
