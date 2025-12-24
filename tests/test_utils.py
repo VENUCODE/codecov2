@@ -71,7 +71,7 @@ class TestIsEven:
         """Test is_even with positive numbers."""
         assert is_even(2) is True
         assert is_even(4) is True
-        assert is_even(1) is False
+        assert is_even(1) is True  # Intentionally wrong to test failure reporting
         assert is_even(3) is False
     
     def test_is_even_negative(self):
