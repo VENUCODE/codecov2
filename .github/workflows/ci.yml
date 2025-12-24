@@ -1,4 +1,4 @@
-name: API workflow
+name: Codecov Coverage Workflow
 
 on:
   push:  # Trigger on pushes to any branch
@@ -6,26 +6,30 @@ on:
     types: [opened, synchronize, reopened]  # Only on PR open, update, or reopen (not on every comment/event)
 
 jobs:
-  build:
-    if: false  # Workflow disabled - using test-reporting.yml instead
+  codecov:
     runs-on: ubuntu-latest
-    name: Test python API
-    # Skip push events on branches that have open PRs (to avoid duplicate runs)
-    # Only run push events on main branch or branches without open PRs
+    name: Test Coverage and Codecov Upload
+    
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Fetch full history for Codecov to calculate patch coverage
-    - uses: actions/setup-python@v5
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+    
     - name: Install requirements
       run: pip install -r requirements.txt
+    
     - name: Run tests and collect coverage
       id: test
-      continue-on-error: true
       run: |
-        pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml || true
+        # Run tests and generate coverage report
+        pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml
+    
     - name: Upload coverage reports to Codecov
       # Upload coverage on both PRs and main branch pushes
       # Codecov intelligently handles PR coverage (shows patch coverage) vs main branch (project coverage)
@@ -38,6 +42,7 @@ jobs:
         fail_ci_if_error: false
         files: ./coverage.xml
         flags: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
+    
     - name: Upload test results to Codecov
       # Upload test results for both PRs and main branch
       if: always() && !cancelled()
@@ -49,29 +54,36 @@ jobs:
         report_type: test_results
         files: ./junit.xml
         fail_ci_if_error: false
-    - name: Check coverage threshold (main branch only)
-      # Only enforce coverage threshold on main branch pushes, not on PRs
-      # PRs will show patch coverage in Codecov comments, but won't block merge
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    - name: Check coverage threshold
+      id: coverage_check
+      # Check coverage threshold for all branches and PRs
+      # Coverage threshold is 75% (matching test-reporting.yml)
       run: |
         if [ -f coverage.xml ]; then
           python << 'EOF'
         import xml.etree.ElementTree as ET
         import sys
         
+        COVERAGE_THRESHOLD = 75
+        
         try:
             tree = ET.parse('coverage.xml')
             root = tree.getroot()
             coverage = float(root.attrib.get('line-rate', 0)) * 100
-            print(f'Current coverage: {coverage:.2f}%')
-            print(f'Required coverage: 70%')
             
-            if coverage < 70:
-                print(f'❌ Coverage {coverage:.2f}% is below the required 70% threshold')
-                print(f'⚠️ This will block merging to main branch')
+            print(f'📊 Current coverage: {coverage:.2f}%')
+            print(f'📋 Required coverage: {COVERAGE_THRESHOLD}%')
+            print(f'')
+            
+            if coverage < COVERAGE_THRESHOLD:
+                print(f'❌ Coverage {coverage:.2f}% is below the required {COVERAGE_THRESHOLD}% threshold')
+                print(f'⚠️ This step will be marked as failed')
                 sys.exit(1)
             else:
-                print(f'✅ Coverage {coverage:.2f}% meets the required 70% threshold')
+                print(f'✅ Coverage {coverage:.2f}% meets the required {COVERAGE_THRESHOLD}% threshold')
+                print(f'✅ This step will be marked as successful')
+                sys.exit(0)
         except Exception as e:
             print(f'❌ Error checking coverage: {e}')
             sys.exit(1)
@@ -80,97 +92,34 @@ jobs:
           echo "❌ Coverage report not found"
           exit 1
         fi
-    - name: Display coverage summary (PRs)
-      # Show coverage summary for PRs (informational only, threshold not enforced)
-      if: github.event_name == 'pull_request'
+    
+    - name: Display coverage summary
+      if: always()
       run: |
         if [ -f coverage.xml ]; then
-          python << 'EOF'
+          python << EOF
         import xml.etree.ElementTree as ET
+        import os
+        
+        event_name = os.environ.get('GITHUB_EVENT_NAME', 'unknown')
         
         try:
             tree = ET.parse('coverage.xml')
             root = tree.getroot()
             coverage = float(root.attrib.get('line-rate', 0)) * 100
-            print(f'📊 Current overall coverage: {coverage:.2f}%')
-            print(f'📝 Codecov will show patch coverage (coverage of changed lines) in PR comments')
-            print(f'ℹ️ Coverage threshold (70%) is only enforced when merging to main branch')
+            
+            if event_name == 'pull_request':
+                print(f'📊 Current overall coverage: {coverage:.2f}%')
+                print(f'📝 Codecov will show patch coverage (coverage of changed lines) in PR comments')
+                print(f'ℹ️ Coverage threshold (75%) is enforced - PR merge will be blocked if below threshold')
+            else:
+                print(f'📊 Current coverage: {coverage:.2f}%')
+                print(f'📋 Required coverage: 75%')
         except Exception as e:
             print(f'⚠️ Error reading coverage: {e}')
         EOF
         else
           echo "⚠️ Coverage report not found - tests may have failed before generating coverage"
         fi
-    - name: Generate Cosmic Ray configuration
-      # Generate mutation testing config dynamically
-      if: always() && !cancelled()
-      run: |
-        echo "⚙️ Generating Cosmic Ray configuration..."
-        cat > cosmic_ray_config.toml << 'EOF'
-        [cosmic-ray]
-        module-path = "app"
-        timeout = 10.0
-        excluded-modules = []
-        test-command = "pytest tests"
-        
-        [cosmic-ray.distributor]
-        name = "local"
-        EOF
-        echo "✅ Configuration file created: cosmic_ray_config.toml"
-        cat cosmic_ray_config.toml
-    - name: Run mutation testing baseline
-      # Ensure tests pass before mutation testing
-      if: always() && !cancelled()
-      run: |
-        echo "🧪 Running mutation testing baseline..."
-        cosmic-ray --verbosity=INFO baseline cosmic_ray_config.toml || {
-          echo "❌ Baseline tests failed - mutation testing cannot proceed"
-          exit 1
-        }
-        echo "✅ Baseline passed - tests work correctly without mutations"
-    - name: Initialize mutation testing session
-      # Create session with all mutations to test
-      if: always() && !cancelled()
-      run: |
-        echo "🔬 Initializing mutation testing session..."
-        cosmic-ray init cosmic_ray_config.toml mutation_session.sqlite || {
-          echo "❌ Failed to initialize mutation session"
-          exit 1
-        }
-        echo "✅ Mutation session initialized"
-    - name: Run mutation testing
-      # Execute mutation tests
-      if: always() && !cancelled()
-      run: |
-        echo "🧬 Running mutation testing..."
-        cosmic-ray exec cosmic_ray_config.toml mutation_session.sqlite || {
-          echo "⚠️ Some mutations may have failed, but continuing to generate report..."
-        }
-        echo "✅ Mutation testing completed"
-    - name: Generate mutation test report
-      # Generate and display mutation test results
-      if: always() && !cancelled()
-      run: |
-        echo "📊 Mutation Testing Results:"
-        echo "================================"
-        cr-report mutation_session.sqlite --show-pending || {
-          echo "⚠️ Failed to generate report"
-          exit 0
-        }
-        echo ""
-        echo "📈 Generating HTML report..."
-        cr-html mutation_session.sqlite > mutation_report.html || {
-          echo "⚠️ Failed to generate HTML report"
-        }
-        if [ -f mutation_report.html ]; then
-          echo "✅ HTML report generated: mutation_report.html"
-        fi
-    - name: Upload mutation test report
-      # Upload mutation test HTML report as artifact
-      if: always() && !cancelled()
-      uses: actions/upload-artifact@v4
-      with:
-        name: mutation-test-report
-        path: mutation_report.html
-        retention-days: 30
-        if-no-files-found: ignore
+      env:
+        GITHUB_EVENT_NAME: ${{ github.event_name }}

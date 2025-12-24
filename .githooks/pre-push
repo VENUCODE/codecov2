@@ -30,19 +30,28 @@ if [ -z "$VIRTUAL_ENV" ] && [ ! -f "venv/bin/activate" ] && [ ! -f ".venv/bin/ac
     echo -e "${YELLOW}WARNING: No virtual environment detected. Consider using a venv.${NC}"
 fi
 
-# Run tests
-echo "Running pytest..."
-if pytest --cov=app --cov-report=term; then
+# Coverage threshold (percentage)
+COVERAGE_THRESHOLD=75
+
+# Run tests with coverage check
+echo "Running pytest with coverage check (minimum ${COVERAGE_THRESHOLD}%)..."
+if pytest --cov=app --cov-report=term --cov-fail-under=${COVERAGE_THRESHOLD}; then
     echo ""
-    echo -e "${GREEN}✓ All tests passed! Proceeding with push...${NC}"
+    echo -e "${GREEN}✓ All tests passed and coverage meets threshold (≥${COVERAGE_THRESHOLD}%)!${NC}"
+    echo -e "${GREEN}Proceeding with push...${NC}"
     exit 0
 else
     echo ""
-    echo -e "${RED}✗ Tests failed! Push aborted.${NC}"
+    echo -e "${RED}✗ Push aborted!${NC}"
     echo ""
-    echo "Please fix the failing tests before pushing."
+    echo "Reason: Either tests failed OR coverage is below ${COVERAGE_THRESHOLD}%"
+    echo ""
+    echo "Please:"
+    echo "  1. Fix any failing tests"
+    echo "  2. Ensure test coverage is at least ${COVERAGE_THRESHOLD}%"
+    echo ""
     echo "You can bypass this hook with: git push --no-verify"
-    echo "However, CI/CD will still block merges if tests fail."
+    echo "However, CI/CD will still block merges if tests fail or coverage is insufficient."
     exit 1
 fi
 

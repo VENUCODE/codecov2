@@ -39,8 +39,9 @@ jobs:
           # Create ctrf directory for CTRF reports
           mkdir -p ctrf
           # Run tests with both JUnit XML and CTRF JSON output
-          # Note: This will fail the workflow if tests fail, which is required for branch protection
-          pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json
+          # Note: This will fail the workflow if tests fail or coverage is below 75%, which is required for branch protection
+          # --cov-fail-under=75 ensures coverage is at least 75%
+          pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=75 --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json
 
       - name: Publish Test Results
         if: always()

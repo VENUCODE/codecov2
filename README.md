@@ -28,18 +28,6 @@ cd codecov
 pip install -r requirements.txt
 ```
 
-3. Set up Git hooks (optional but recommended):
-```bash
-# Linux/macOS
-chmod +x setup-git-hooks.sh
-./setup-git-hooks.sh
-
-# Windows
-setup-git-hooks.bat
-```
-
-The Git hooks will run tests before allowing pushes. See [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) for details on the two-layer enforcement system.
-
 ## Running the API
 
 Start the development server:
