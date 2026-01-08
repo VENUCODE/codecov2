@@ -1,0 +1,99 @@
+name: 'Mutation Test Module'
+description: 'Run mutation testing on a single Python module using cosmic-ray'
+inputs:
+  module:
+    description: 'Module name (e.g., main, utils, errors)'
+    required: true
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.10'
+outputs:
+  database-path:
+    description: 'Path to the SQLite database file'
+    value: ${{ steps.init-db.outputs.database-path }}
+  report-path:
+    description: 'Path to the HTML report'
+    value: ${{ steps.generate-report.outputs.report-path }}
+  config-path:
+    description: 'Path to the cosmic-ray config file'
+    value: ${{ steps.config.outputs.config-path }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python and UV
+      uses: ./.github/actions/setup-python-uv
+      with:
+        python-version: ${{ inputs.python-version }}
+      shell: bash
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        uv pip install --system -r requirements.txt
+        uv pip install --system pytest-json-ctrf
+
+    - name: Generate cosmic-ray config
+      id: config
+      shell: bash
+      run: |
+        config_file="cosmic-ray-${{ inputs.module }}.toml"
+        
+        # Check if module-specific test file exists
+        if [ -f "tests/test_${{ inputs.module }}.py" ]; then
+          test_cmd="pytest tests/test_${{ inputs.module }}.py"
+        else
+          test_cmd="pytest tests"
+        fi
+        
+        # Generate config file
+        cat > "$config_file" << EOF
+        [cosmic-ray]
+        module-path = "app.${{ inputs.module }}"
+        timeout = 10.0
+        excluded-modules = []
+        test-command = "$test_cmd"
+        
+        [cosmic-ray.distributor]
+        name = "local"
+        EOF
+        
+        echo "config-path=$config_file" >> $GITHUB_OUTPUT
+        echo "Generated config: $config_file"
+        echo "Module path: app.${{ inputs.module }}"
+        echo "Test command: $test_cmd"
+
+    - name: Initialize cosmic-ray database
+      id: init-db
+      shell: bash
+      run: |
+        db_file="db-${{ inputs.module }}.sqlite"
+        cosmic-ray init "${{ steps.config.outputs.config-path }}" "$db_file"
+        echo "database-path=$db_file" >> $GITHUB_OUTPUT
+        echo "Initialized database: $db_file"
+
+    - name: Run baseline tests
+      shell: bash
+      run: |
+        cosmic-ray baseline "${{ steps.config.outputs.config-path }}"
+
+    - name: Execute mutation testing
+      shell: bash
+      continue-on-error: true
+      run: |
+        cosmic-ray exec "${{ steps.config.outputs.config-path }}" "${{ steps.init-db.outputs.database-path }}"
+
+    - name: Check mutation status
+      shell: bash
+      run: |
+        cr-report "${{ steps.init-db.outputs.database-path }}" --show-pending
+
+    - name: Generate HTML report
+      id: generate-report
+      shell: bash
+      run: |
+        mkdir -p "mutation-reports/${{ inputs.module }}"
+        cr-html "${{ steps.init-db.outputs.database-path }}" > "mutation-reports/${{ inputs.module }}/report.html"
+        echo "report-path=mutation-reports/${{ inputs.module }}/report.html" >> $GITHUB_OUTPUT
+        echo "Generated HTML report: mutation-reports/${{ inputs.module }}/report.html"
+
