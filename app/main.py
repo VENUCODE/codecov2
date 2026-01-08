@@ -1,22 +1,24 @@
+import math
+
 from fastapi import FastAPI, HTTPException
-from app.models import MathRequest, MathResponse, SingleNumberRequest, HealthResponse
+from fastapi.exceptions import RequestValidationError
+
+from app.errors import division_by_zero_handler, validation_exception_handler
+from app.models import HealthResponse, MathRequest, MathResponse, SingleNumberRequest
 from app.utils import (
-    validate_division,
     calculate_percentage,
-    round_to_precision,
     factorial,
+    format_number,
     get_statistics,
     is_even,
-    format_number,
+    round_to_precision,
+    validate_division,
 )
-from app.errors import MathError
-import math
 
 app = FastAPI(title="Math Operations API", version="1.0.0")
 
 # Add error handlers
-from app.errors import validation_exception_handler, division_by_zero_handler
-from fastapi.exceptions import RequestValidationError
+
 
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(ValueError, division_by_zero_handler)

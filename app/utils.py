@@ -1,8 +1,5 @@
 """Utility functions for math operations."""
 
-import math
-from typing import Optional
-
 
 def validate_division(b: float) -> bool:
     """Validate that division by zero is not attempted."""

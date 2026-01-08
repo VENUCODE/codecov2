@@ -1,14 +1,15 @@
 """Tests for utility functions."""
 
 import pytest  # pyright: ignore[reportMissingImports]
+
 from app.utils import (
-    validate_division,
     calculate_percentage,
-    round_to_precision,
-    is_even,
     factorial,
     format_number,
     get_statistics,
+    is_even,
+    round_to_precision,
+    validate_division,
 )
 
 

@@ -1,10 +1,9 @@
 """Tests for error handlers."""
 
-import pytest
 from fastapi.testclient import TestClient
-from fastapi.exceptions import RequestValidationError
-from app.main import app
+
 from app.errors import MathError
+from app.main import app
 
 client = TestClient(app)
 
