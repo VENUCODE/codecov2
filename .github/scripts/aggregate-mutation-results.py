@@ -54,11 +54,41 @@ def query_database(db_file):
 
 def aggregate_results():
     """Aggregate results from all module databases."""
-    db_files = glob.glob("db-*.sqlite")
+    # Look for database files in current directory and subdirectories
+    db_files = []
+
+    # Search in current directory
+    db_files.extend(glob.glob("db-*.sqlite"))
+
+    # Search recursively in subdirectories
+    for root, dirs, files in os.walk("."):
+        for file in files:
+            if file.startswith("db-") and file.endswith(".sqlite"):
+                db_files.append(os.path.join(root, file))
+
+    # Remove duplicates and sort, normalize paths
+    db_files = sorted(list(set([os.path.normpath(f) for f in db_files])))
 
     if not db_files:
         print("⚠️ No database files found")
-        return None
+        print(f"Current directory: {os.getcwd()}")
+        try:
+            print(f"Files in current directory: {os.listdir('.')}")
+        except Exception:
+            print("Error listing directory contents")
+        # Try to find any .sqlite files recursively
+        all_sqlite = []
+        for root, dirs, files in os.walk("."):
+            for file in files:
+                if file.endswith(".sqlite"):
+                    all_sqlite.append(os.path.join(root, file))
+        if all_sqlite:
+            print(f"Found SQLite files: {all_sqlite}")
+            db_files = all_sqlite
+        else:
+            return None
+
+    print(f"Found {len(db_files)} database file(s): {db_files}")
 
     module_results = {}
     total_mutations = 0
@@ -67,7 +97,11 @@ def aggregate_results():
     total_pending = 0
 
     for db_file in db_files:
-        module_name = db_file.replace("db-", "").replace(".sqlite", "")
+        # Extract module name from path (handle subdirectories)
+        # e.g., "mutation-errors/db-errors.sqlite" -> "errors"
+        # or "db-errors.sqlite" -> "errors"
+        basename = os.path.basename(db_file)
+        module_name = basename.replace("db-", "").replace(".sqlite", "")
         stats = query_database(db_file)
 
         module_results[module_name] = stats

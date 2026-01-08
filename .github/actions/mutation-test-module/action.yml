@@ -46,9 +46,10 @@ runs:
         fi
         
         # Generate config file
+        # Use file path format instead of module path for better compatibility
         cat > "$config_file" << EOF
         [cosmic-ray]
-        module-path = "app.${{ inputs.module }}"
+        module-path = "app/${{ inputs.module }}.py"
         timeout = 10.0
         excluded-modules = []
         test-command = "$test_cmd"
@@ -59,7 +60,7 @@ runs:
         
         echo "config-path=$config_file" >> $GITHUB_OUTPUT
         echo "Generated config: $config_file"
-        echo "Module path: app.${{ inputs.module }}"
+        echo "Module path: app/${{ inputs.module }}.py"
         echo "Test command: $test_cmd"
 
     - name: Initialize cosmic-ray database
