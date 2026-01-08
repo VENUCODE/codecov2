@@ -1,0 +1,62 @@
+name: Mutation Testing
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
+  workflow_dispatch: 
+
+jobs:
+  mutation-testing:
+    name: Mutation Testing with Cosmic-Ray
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # Mutation testing can take a while
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install --system -r requirements.txt
+          uv pip install --system pytest-json-ctrf
+
+      - name: Initialize cosmic-ray database
+        shell: bash
+        run: |
+          cosmic-ray init tutorial.toml db.sqlite
+
+      - name: Run baseline tests
+        shell: bash
+        run: |
+          # Ensure tests pass on unmutated code
+          cosmic-ray baseline tutorial.toml
+
+      - name: Execute mutation testing
+        id: mutation_test
+        shell: bash
+        continue-on-error: true
+        run: |
+          # Execute mutation testing
+          cosmic-ray exec tutorial.toml db.sqlite
+
+      - name: Check mutation testing status
+        shell: bash
+        run: |
+          # Check status of mutations using cr-report
+          cr-report db.sqlite --show-pending
+
+      - name: Generate HTML report
+        shell: bash
+        run: |
+          mkdir -p mutation-reports/html
+          # Generate HTML report using cr-html command
+          cr-html db.sqlite > mutation-reports/html/report.html
+          echo "HTML report generated at mutation-reports/html/report.html"
