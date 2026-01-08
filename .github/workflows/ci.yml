@@ -1,125 +1,251 @@
-name: Codecov Coverage Workflow
+name: CI/CD Pipeline
 
 on:
-  push: 
-  pull_request: 
-    types: [opened, synchronize, reopened]  # Only on PR open, update, or reopen (not on every comment/event)
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
 
 jobs:
-  codecov:
+  # Code Quality Checks - Run in parallel
+  uv-lock-check:
+    name: UV Lock Check
     runs-on: ubuntu-latest
-    name: Test Coverage and Codecov Upload
+    steps:
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Run uv-lock check
+        shell: bash
+        run: |
+          uv lock --check
+
+  ruff-check:
+    name: Ruff Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Run ruff check
+        shell: bash
+        run: |
+          uv tool run ruff check .
+
+  ruff-format-check:
+    name: Ruff Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Run ruff format check
+        shell: bash
+        run: |
+          uv tool run ruff format --check .
+
+  gitleaks-check:
+    name: Gitleaks Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/v8.24.2/scripts/install.sh | sh -s -- -b /usr/local/bin v8.24.2
+          gitleaks detect --source . --verbose --no-git
+
+  # Combined job that waits for all code quality checks
+  code-quality:
+    name: Code Quality (All Checks)
+    runs-on: ubuntu-latest
+    needs: [uv-lock-check, ruff-check, ruff-format-check, gitleaks-check]
+    if: always()
+    steps:
+      - name: Check code quality status
+        shell: bash
+        run: |
+          if [ "${{ needs.uv-lock-check.result }}" != "success" ] || \
+             [ "${{ needs.ruff-check.result }}" != "success" ] || \
+             [ "${{ needs.ruff-format-check.result }}" != "success" ] || \
+             [ "${{ needs.gitleaks-check.result }}" != "success" ]; then
+            echo "❌ One or more code quality checks failed"
+            exit 1
+          else
+            echo "✅ All code quality checks passed"
+          fi
+
+  # Unit Tests - Depends on code quality checks
+  unit-tests:
+    name: Unit Tests and Coverage
+    runs-on: ubuntu-latest
+    needs: [uv-lock-check, ruff-check, ruff-format-check, gitleaks-check]
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Fetch full history for Codecov to calculate patch coverage
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    
-    - name: Install requirements
-      run: pip install -r requirements.txt
-    
-    - name: Run tests and collect coverage
-      id: test
-      run: |
-        # Run tests and generate coverage report
-        pytest --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml
-    
-    - name: Upload coverage reports to Codecov
-      # Upload coverage on both PRs and main branch pushes
-      # Codecov intelligently handles PR coverage (shows patch coverage) vs main branch (project coverage)
-      if: always()
-      uses: codecov/codecov-action@v5
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      continue-on-error: true
-      with:
-        fail_ci_if_error: false
-        files: ./coverage.xml
-        flags: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
-    
-    - name: Upload test results to Codecov
-      # Upload test results for both PRs and main branch
-      if: always() && !cancelled()
-      uses: codecov/codecov-action@v5
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      continue-on-error: true
-      with:
-        report_type: test_results
-        files: ./junit.xml
-        fail_ci_if_error: false
-    
-    - name: Check coverage threshold
-      id: coverage_check
-      # Check coverage threshold for all branches and PRs
-      # Coverage threshold is 75% (matching test-reporting.yml)
-      run: |
-        if [ -f coverage.xml ]; then
-          python << 'EOF'
-        import xml.etree.ElementTree as ET
-        import sys
-        
-        COVERAGE_THRESHOLD = 75
-        
-        try:
-            tree = ET.parse('coverage.xml')
-            root = tree.getroot()
-            coverage = float(root.attrib.get('line-rate', 0)) * 100
-            
-            print(f'📊 Current coverage: {coverage:.2f}%')
-            print(f'📋 Required coverage: {COVERAGE_THRESHOLD}%')
-            print(f'')
-            
-            if coverage < COVERAGE_THRESHOLD:
-                print(f'❌ Coverage {coverage:.2f}% is below the required {COVERAGE_THRESHOLD}% threshold')
-                print(f'⚠️ This step will be marked as failed')
-                sys.exit(1)
-            else:
-                print(f'✅ Coverage {coverage:.2f}% meets the required {COVERAGE_THRESHOLD}% threshold')
-                print(f'✅ This step will be marked as successful')
-                sys.exit(0)
-        except Exception as e:
-            print(f'❌ Error checking coverage: {e}')
-            sys.exit(1)
-        EOF
-        else
-          echo "❌ Coverage report not found"
-          exit 1
-        fi
-    
-    - name: Display coverage summary
-      if: always()
-      run: |
-        if [ -f coverage.xml ]; then
-          python << EOF
-        import xml.etree.ElementTree as ET
-        import os
-        
-        event_name = os.environ.get('GITHUB_EVENT_NAME', 'unknown')
-        
-        try:
-            tree = ET.parse('coverage.xml')
-            root = tree.getroot()
-            coverage = float(root.attrib.get('line-rate', 0)) * 100
-            
-            if event_name == 'pull_request':
-                print(f'📊 Current overall coverage: {coverage:.2f}%')
-                print(f'📝 Codecov will show patch coverage (coverage of changed lines) in PR comments')
-                print(f'ℹ️ Coverage threshold (75%) is enforced - PR merge will be blocked if below threshold')
-            else:
-                print(f'📊 Current coverage: {coverage:.2f}%')
-                print(f'📋 Required coverage: 75%')
-        except Exception as e:
-            print(f'⚠️ Error reading coverage: {e}')
-        EOF
-        else
-          echo "⚠️ Coverage report not found - tests may have failed before generating coverage"
-        fi
-      env:
-        GITHUB_EVENT_NAME: ${{ github.event_name }}
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install -r requirements.txt
+          uv pip install pytest-json-ctrf
+
+      - name: Run tests and generate reports
+        id: test
+        shell: bash
+        run: |
+          # Create ctrf directory for CTRF reports
+          mkdir -p ctrf
+          # Run tests with both JUnit XML and CTRF JSON output
+          # --cov-fail-under=75 ensures coverage is at least 75%
+          pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=75 --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json -m "not integration and not e2e and not slow"
+
+      - name: Publish Test Results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: junit.xml
+          check_name: 'Test Results'
+          comment_mode: always
+          report_individual_runs: true
+          deduplicate_classes_by_file_name: true
+
+      - name: Publish Test Report with GitHub Test Reporter
+        if: always()
+        uses: ctrf-io/github-test-reporter@v1
+        with:
+          report-path: './ctrf/*.json'
+          github-report: true
+          summary-report: true
+          test-report: true
+          failed-report: true
+          upload-artifact: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload coverage reports to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+        with:
+          fail_ci_if_error: false
+          files: ./coverage.xml
+          flags: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
+
+      - name: Upload test results to Codecov
+        if: always() && !cancelled()
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+        with:
+          report_type: test_results
+          files: ./junit.xml
+          fail_ci_if_error: false
+
+      - name: Check coverage threshold
+        id: coverage_check
+        shell: bash
+        run: |
+          if [ -f coverage.xml ]; then
+            python << 'EOF'
+          import xml.etree.ElementTree as ET
+          import sys
+          
+          COVERAGE_THRESHOLD = 75
+          
+          try:
+              tree = ET.parse('coverage.xml')
+              root = tree.getroot()
+              coverage = float(root.attrib.get('line-rate', 0)) * 100
+              
+              print(f'📊 Current coverage: {coverage:.2f}%')
+              print(f'📋 Required coverage: {COVERAGE_THRESHOLD}%')
+              print(f'')
+              
+              if coverage < COVERAGE_THRESHOLD:
+                  print(f'❌ Coverage {coverage:.2f}% is below the required {COVERAGE_THRESHOLD}% threshold')
+                  print(f'⚠️ This step will be marked as failed')
+                  sys.exit(1)
+              else:
+                  print(f'✅ Coverage {coverage:.2f}% meets the required {COVERAGE_THRESHOLD}% threshold')
+                  print(f'✅ This step will be marked as successful')
+                  sys.exit(0)
+          except Exception as e:
+              print(f'❌ Error checking coverage: {e}')
+              sys.exit(1)
+          EOF
+          else
+            echo "❌ Coverage report not found"
+            exit 1
+          fi
+
+      - name: Display coverage summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f coverage.xml ]; then
+            python << EOF
+          import xml.etree.ElementTree as ET
+          import os
+          
+          event_name = os.environ.get('GITHUB_EVENT_NAME', 'unknown')
+          
+          try:
+              tree = ET.parse('coverage.xml')
+              root = tree.getroot()
+              coverage = float(root.attrib.get('line-rate', 0)) * 100
+              
+              if event_name == 'pull_request':
+                  print(f'📊 Current overall coverage: {coverage:.2f}%')
+                  print(f'📝 Codecov will show patch coverage (coverage of changed lines) in PR comments')
+                  print(f'ℹ️ Coverage threshold (75%) is enforced - PR merge will be blocked if below threshold')
+              else:
+                  print(f'📊 Current coverage: {coverage:.2f}%')
+                  print(f'📋 Required coverage: 75%')
+          except Exception as e:
+              print(f'⚠️ Error reading coverage: {e}')
+          EOF
+          else
+            echo "⚠️ Coverage report not found - tests may have failed before generating coverage"
+          fi
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
+  # Deployment - Depends on unit tests
+  deployment:
+    name: Deployment
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Deployment placeholder
+        shell: bash
+        run: |
+          echo "🚀 Deployment step - Add your deployment logic here"
+          echo "This step runs after code quality checks and unit tests pass"
+          echo "Only runs on push to main/master branches"
