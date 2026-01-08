@@ -25,7 +25,6 @@ runs:
       uses: ./.github/actions/setup-python-uv
       with:
         python-version: ${{ inputs.python-version }}
-      shell: bash
 
     - name: Install dependencies
       shell: bash

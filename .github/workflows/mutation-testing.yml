@@ -70,54 +70,11 @@ jobs:
             cosmic-ray-${{ matrix.module }}.toml
           retention-days: 30
 
-  # Job 3: Status Monitor (Continuous Loop)
-  status-monitor:
-    name: Status Monitor
-    runs-on: ubuntu-latest
-    needs: [setup, mutation-test]
-    if: always()
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python and UV
-        uses: ./.github/actions/setup-python-uv
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          uv pip install --system -r requirements.txt
-
-      - name: Download all module artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: mutation-*
-          merge-multiple: true
-          path: .
-
-      - name: Monitor mutation testing status
-        shell: bash
-        env:
-          CHECK_INTERVAL: 30
-          MAX_WAIT_TIME: 3600
-        run: |
-          python .github/scripts/monitor-mutation-status.py
-
-      - name: Upload status summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mutation-status-summary
-          path: mutation-reports/status-summary.json
-          retention-days: 30
-
-  # Job 4: Aggregate Results
+  # Job 3: Aggregate Results
   aggregate:
     name: Aggregate Results
     runs-on: ubuntu-latest
-    needs: [mutation-test, status-monitor]
+    needs: mutation-test
     if: always()
     steps:
       - name: Checkout code
@@ -139,18 +96,27 @@ jobs:
           pattern: mutation-*
           merge-multiple: true
           path: .
+
+      - name: Check mutation status for all modules
+        shell: bash
+        run: |
+          echo "=== Mutation Testing Status ==="
+          for db_file in db-*.sqlite; do
+            if [ -f "$db_file" ]; then
+              module=$(echo "$db_file" | sed 's/db-\(.*\)\.sqlite/\1/')
+              echo ""
+              echo "Module: $module"
+              echo "----------------------------------------"
+              cr-report "$db_file" --show-pending | grep -E "(total jobs|complete|surviving mutants)" || echo "Status check completed"
+            fi
+          done
+          echo ""
+          echo "=== Aggregated Results ==="
 
       - name: Aggregate mutation results
         shell: bash
         run: |
           python .github/scripts/aggregate-mutation-results.py
-
-      - name: Download module reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: mutation-*
-          merge-multiple: true
-          path: mutation-reports
 
       - name: Upload aggregated reports
         if: always()
@@ -162,7 +128,7 @@ jobs:
             mutation-reports/*/
           retention-days: 30
 
-  # Job 5: Upload and Notify
+  # Job 4: Upload and Notify
   notify:
     name: Upload and Notify
     runs-on: ubuntu-latest
