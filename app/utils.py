@@ -47,11 +47,10 @@ def get_statistics(numbers: list[float]) -> dict[str, float]:
     """Calculate statistics for a list of numbers."""
     if not numbers:
         return {"mean": 0, "min": 0, "max": 0, "sum": 0}
-    
+
     return {
         "mean": sum(numbers) / len(numbers),
         "min": min(numbers),
         "max": max(numbers),
-        "sum": sum(numbers)
+        "sum": sum(numbers),
     }
-

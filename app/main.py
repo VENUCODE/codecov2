@@ -1,6 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from app.models import MathRequest, MathResponse, SingleNumberRequest, HealthResponse
-from app.utils import validate_division, calculate_percentage, round_to_precision, factorial, get_statistics, is_even, format_number
+from app.utils import (
+    validate_division,
+    calculate_percentage,
+    round_to_precision,
+    factorial,
+    get_statistics,
+    is_even,
+    format_number,
+)
 from app.errors import MathError
 import math
 
@@ -75,7 +83,9 @@ def modulo(request: MathRequest) -> MathResponse:
 def sqrt(request: SingleNumberRequest) -> MathResponse:
     """Calculate square root of a number."""
     if request.value < 0:
-        raise HTTPException(status_code=400, detail="Cannot calculate square root of negative number")
+        raise HTTPException(
+            status_code=400, detail="Cannot calculate square root of negative number"
+        )
     result = math.sqrt(request.value)
     return MathResponse(result=round_to_precision(result))
 
@@ -94,7 +104,9 @@ def percentage(request: MathRequest) -> MathResponse:
 def calculate_factorial(request: SingleNumberRequest) -> MathResponse:
     """Calculate factorial of a number."""
     if request.value < 0 or request.value != int(request.value):
-        raise HTTPException(status_code=400, detail="Factorial is only defined for non-negative integers")
+        raise HTTPException(
+            status_code=400, detail="Factorial is only defined for non-negative integers"
+        )
     result = factorial(int(request.value))
     return MathResponse(result=float(result))
 
@@ -118,4 +130,3 @@ def format_number_endpoint(number: float):
     """Format a number with commas."""
     formatted = format_number(number)
     return {"original": number, "formatted": formatted}
-

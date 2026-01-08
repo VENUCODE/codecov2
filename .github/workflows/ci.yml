@@ -69,10 +69,12 @@ jobs:
           fetch-depth: 0
 
       - name: Run gitleaks
-        shell: bash
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/v8.24.2/scripts/install.sh | sh -s -- -b /usr/local/bin v8.24.2
-          gitleaks detect --source . --verbose --no-git
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: v8.24.2
+          args: --verbose --no-git
 
   # Combined job that waits for all code quality checks
   code-quality:
