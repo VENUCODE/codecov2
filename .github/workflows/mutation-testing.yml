@@ -88,7 +88,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          uv pip install --system -r requirements.txt
+          uv pip install --system cosmic-ray
 
       - name: Download all module artifacts
         uses: actions/download-artifact@v4
@@ -96,45 +96,63 @@ jobs:
           pattern: mutation-*
           merge-multiple: true
           path: .
-          
-      - name: List downloaded files
-        shell: bash
-        run: |
-          echo "Current directory contents:"
-          ls -la
-          echo ""
-          echo "Searching for database files:"
-          find . -name "db-*.sqlite" -type f || echo "No database files found"
 
       - name: Check mutation status for all modules
+        id: status
         shell: bash
         run: |
-          echo "=== Mutation Testing Status ==="
-          for db_file in db-*.sqlite; do
+          echo "=== Mutation Testing Status ===" > mutation-summary.txt
+          echo "" >> mutation-summary.txt
+          
+          total_jobs=0
+          total_complete=0
+          total_surviving=0
+          
+          for db_file in $(find . -name "db-*.sqlite" -type f); do
             if [ -f "$db_file" ]; then
-              module=$(echo "$db_file" | sed 's/db-\(.*\)\.sqlite/\1/')
-              echo ""
-              echo "Module: $module"
-              echo "----------------------------------------"
-              cr-report "$db_file" --show-pending | grep -E "(total jobs|complete|surviving mutants)" || echo "Status check completed"
+              module=$(basename "$db_file" | sed 's/db-\(.*\)\.sqlite/\1/')
+              echo "Module: $module" >> mutation-summary.txt
+              echo "----------------------------------------" >> mutation-summary.txt
+              
+              # Capture full cr-report output
+              cr-report "$db_file" --show-pending >> mutation-summary.txt
+              
+              # Extract numbers for summary (optional, for notification)
+              report_output=$(cr-report "$db_file" --show-pending 2>/dev/null || echo "")
+              jobs=$(echo "$report_output" | grep "total jobs:" | sed 's/.*total jobs: \([0-9]*\).*/\1/' || echo "0")
+              complete=$(echo "$report_output" | grep "complete:" | sed 's/.*complete: \([0-9]*\).*/\1/' || echo "0")
+              surviving=$(echo "$report_output" | grep "surviving mutants:" | sed 's/.*surviving mutants: \([0-9]*\).*/\1/' || echo "0")
+              
+              total_jobs=$((total_jobs + jobs))
+              total_complete=$((total_complete + complete))
+              total_surviving=$((total_surviving + surviving))
+              
+              echo "" >> mutation-summary.txt
             fi
           done
-          echo ""
-          echo "=== Aggregated Results ==="
+          
+          echo "=== Summary ===" >> mutation-summary.txt
+          echo "Total Jobs: $total_jobs" >> mutation-summary.txt
+          echo "Total Complete: $total_complete" >> mutation-summary.txt
+          echo "Total Surviving Mutants: $total_surviving" >> mutation-summary.txt
+          
+          # Display summary
+          cat mutation-summary.txt
+          
+          # Save summary for notification
+          echo "total_jobs=$total_jobs" >> $GITHUB_OUTPUT
+          echo "total_complete=$total_complete" >> $GITHUB_OUTPUT
+          echo "total_surviving=$total_surviving" >> $GITHUB_OUTPUT
 
-      - name: Aggregate mutation results
-        shell: bash
-        run: |
-          python .github/scripts/aggregate-mutation-results.py
-
-      - name: Upload aggregated reports
+      - name: Upload mutation reports and summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-reports-aggregated
+          name: mutation-reports-all
           path: |
-            mutation-reports/aggregated/
-            mutation-reports/*/
+            mutation-reports/
+            mutation-summary.txt
+            db-*.sqlite
           retention-days: 30
 
   # Job 4: Upload and Notify
@@ -146,10 +164,10 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Download aggregated reports
+      - name: Download reports
         uses: actions/download-artifact@v4
         with:
-          name: mutation-reports-aggregated
+          name: mutation-reports-all
           path: mutation-reports
 
       - name: Comment PR with results
@@ -158,35 +176,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            let comment = '## 🧬 Mutation Testing Results\n\n';
+            let comment = '## 🧬 Mutation Testing Results\\n\\n';
             
             try {
-              const summaryPath = 'mutation-reports/aggregated/summary.json';
+              // Read the summary file
+              const summaryPath = 'mutation-reports/mutation-summary.txt';
               if (fs.existsSync(summaryPath)) {
-                const data = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
-                const overall = data.overall;
-                const score = overall.mutation_score;
-                const emoji = score >= 70 ? '✅' : '⚠️';
-                
-                comment += `${emoji} **Overall Mutation Score: ${score.toFixed(2)}%**\n\n`;
-                comment += `- Total Mutations: ${overall.total_mutations}\n`;
-                comment += `- Killed: ${overall.killed}\n`;
-                comment += `- Survived: ${overall.survived}\n`;
-                comment += `- Pending: ${overall.pending}\n\n`;
-                
-                comment += `### Per-Module Breakdown\n\n`;
-                for (const [module, scores] of Object.entries(data.modules)) {
-                  const modEmoji = scores.score >= 70 ? '✅' : '⚠️';
-                  comment += `${modEmoji} **${module}**: ${scores.score.toFixed(2)}% `;
-                  comment += `(${scores.killed}/${scores.completed} killed)\n`;
-                }
-                
-                comment += `\n📊 Detailed reports are available in the workflow artifacts.\n`;
+                const summary = fs.readFileSync(summaryPath, 'utf8');
+                comment += '```\\n' + summary + '\\n```\\n\\n';
+                comment += '📊 Detailed HTML reports are available in the workflow artifacts.\\n';
               } else {
-                comment += '⚠️ Could not find aggregated results. Check workflow logs for details.\n';
+                comment += '⚠️ Could not find mutation summary. Check workflow logs for details.\\n';
               }
             } catch (error) {
-              comment += `⚠️ Error generating report: ${error.message}\n`;
+              comment += `⚠️ Error generating report: ${error.message}\\n`;
             }
             
             github.rest.issues.createComment({

@@ -253,7 +253,200 @@ jobs:
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
 
-  # Deployment - Depends on unit tests
+  # Mutation Testing Setup - Depends on unit tests (runs in parallel with deployment)
+  mutation-setup:
+    name: Mutation Testing Setup
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    outputs:
+      modules: ${{ steps.detect.outputs.modules }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install --system -r requirements.txt
+          uv pip install --system pytest-json-ctrf
+          uv pip install --system cosmic-ray
+
+      - name: Detect modules
+        id: detect
+        shell: bash
+        run: |
+          python .github/scripts/detect-modules.py > modules.json
+          modules=$(cat modules.json)
+          echo "modules=$modules" >> $GITHUB_OUTPUT
+          echo "Detected modules: $modules"
+
+  # Parallel Mutation Testing (Matrix Strategy) - Depends on mutation-setup
+  mutation-test:
+    name: Mutation Test - ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    needs: mutation-setup
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.mutation-setup.outputs.modules) }}
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run mutation testing
+        id: mutation
+        uses: ./.github/actions/mutation-test-module
+        with:
+          module: ${{ matrix.module }}
+          python-version: '3.10'
+
+      - name: Upload module artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ matrix.module }}
+          path: |
+            db-${{ matrix.module }}.sqlite
+            mutation-reports/${{ matrix.module }}/
+            cosmic-ray-${{ matrix.module }}.toml
+          retention-days: 30
+
+  # Aggregate Mutation Results - Depends on mutation-test
+  mutation-aggregate:
+    name: Aggregate Mutation Results
+    runs-on: ubuntu-latest
+    needs: mutation-test
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python and UV
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv pip install --system cosmic-ray
+
+      - name: Download all module artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mutation-*
+          merge-multiple: true
+          path: .
+
+      - name: Check mutation status for all modules
+        id: status
+        shell: bash
+        run: |
+          echo "=== Mutation Testing Status ===" > mutation-summary.txt
+          echo "" >> mutation-summary.txt
+          
+          total_jobs=0
+          total_complete=0
+          total_surviving=0
+          
+          for db_file in $(find . -name "db-*.sqlite" -type f); do
+            if [ -f "$db_file" ]; then
+              module=$(basename "$db_file" | sed 's/db-\(.*\)\.sqlite/\1/')
+              echo "Module: $module" >> mutation-summary.txt
+              echo "----------------------------------------" >> mutation-summary.txt
+              
+              # Capture full cr-report output
+              cr-report "$db_file" --show-pending >> mutation-summary.txt
+              
+              # Extract numbers for summary (optional, for notification)
+              report_output=$(cr-report "$db_file" --show-pending 2>/dev/null || echo "")
+              jobs=$(echo "$report_output" | grep "total jobs:" | sed 's/.*total jobs: \([0-9]*\).*/\1/' || echo "0")
+              complete=$(echo "$report_output" | grep "complete:" | sed 's/.*complete: \([0-9]*\).*/\1/' || echo "0")
+              surviving=$(echo "$report_output" | grep "surviving mutants:" | sed 's/.*surviving mutants: \([0-9]*\).*/\1/' || echo "0")
+              
+              total_jobs=$((total_jobs + jobs))
+              total_complete=$((total_complete + complete))
+              total_surviving=$((total_surviving + surviving))
+              
+              echo "" >> mutation-summary.txt
+            fi
+          done
+          
+          echo "=== Summary ===" >> mutation-summary.txt
+          echo "Total Jobs: $total_jobs" >> mutation-summary.txt
+          echo "Total Complete: $total_complete" >> mutation-summary.txt
+          echo "Total Surviving Mutants: $total_surviving" >> mutation-summary.txt
+          
+          # Display summary
+          cat mutation-summary.txt
+          
+          # Save summary for notification
+          echo "total_jobs=$total_jobs" >> $GITHUB_OUTPUT
+          echo "total_complete=$total_complete" >> $GITHUB_OUTPUT
+          echo "total_surviving=$total_surviving" >> $GITHUB_OUTPUT
+
+      - name: Upload mutation reports and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-reports-all
+          path: |
+            mutation-reports/
+            mutation-summary.txt
+            db-*.sqlite
+          retention-days: 30
+
+  # Mutation Testing Notification - Depends on mutation-aggregate
+  mutation-notify:
+    name: Mutation Testing Notification
+    runs-on: ubuntu-latest
+    needs: mutation-aggregate
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          name: mutation-reports-all
+          path: mutation-reports
+
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let comment = '## 🧬 Mutation Testing Results\\n\\n';
+            
+            try {
+              // Read the summary file
+              const summaryPath = 'mutation-reports/mutation-summary.txt';
+              if (fs.existsSync(summaryPath)) {
+                const summary = fs.readFileSync(summaryPath, 'utf8');
+                comment += '```\\n' + summary + '\\n```\\n\\n';
+                comment += '📊 Detailed HTML reports are available in the workflow artifacts.\\n';
+              } else {
+                comment += '⚠️ Could not find mutation summary. Check workflow logs for details.\\n';
+              }
+            } catch (error) {
+              comment += `⚠️ Error generating report: ${error.message}\\n`;
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Deployment - Depends on unit tests (runs in parallel with mutation testing)
   deployment:
     name: Deployment
     runs-on: ubuntu-latest
@@ -274,3 +467,4 @@ jobs:
           echo "🚀 Deployment step - Add your deployment logic here"
           echo "This step runs after code quality checks and unit tests pass"
           echo "Only runs on push to main/master branches"
+          echo "Runs in parallel with mutation testing"
