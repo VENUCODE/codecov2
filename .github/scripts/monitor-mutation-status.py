@@ -17,10 +17,7 @@ def run_cr_report(db_file):
     """Run cr-report and return output."""
     try:
         result = subprocess.run(
-            ["cr-report", db_file, "--show-pending"],
-            capture_output=True,
-            text=True,
-            check=True
+            ["cr-report", db_file, "--show-pending"], capture_output=True, text=True, check=True
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
@@ -33,22 +30,21 @@ def run_cr_report(db_file):
 
 def extract_status_with_grep(output):
     """Extract status information using grep-like pattern matching."""
-    status = {
-        "total": 0,
-        "complete": 0,
-        "surviving": 0,
-        "pending": 0
-    }
+    status = {"total": 0, "complete": 0, "surviving": 0, "pending": 0}
 
-    lines = output.split('\n')
+    lines = output.split("\n")
     for line in lines:
         if "total jobs:" in line.lower():
             # Extract number after "total jobs:"
             parts = line.split()
             for i, part in enumerate(parts):
-                if part.lower() == "total" and i + 2 < len(parts) and parts[i+1].lower() == "jobs:":
+                if (
+                    part.lower() == "total"
+                    and i + 2 < len(parts)
+                    and parts[i + 1].lower() == "jobs:"
+                ):
                     try:
-                        status["total"] = int(parts[i+2])
+                        status["total"] = int(parts[i + 2])
                     except (ValueError, IndexError):
                         pass
 
@@ -58,7 +54,7 @@ def extract_status_with_grep(output):
             for i, part in enumerate(parts):
                 if part.lower() == "complete:":
                     try:
-                        status["complete"] = int(parts[i+1])
+                        status["complete"] = int(parts[i + 1])
                     except (ValueError, IndexError):
                         pass
 
@@ -66,11 +62,14 @@ def extract_status_with_grep(output):
             # Extract number after "surviving mutants:"
             parts = line.split()
             for i, part in enumerate(parts):
-                if part.lower() == "surviving" and i + 1 < len(parts) \
-                    and parts[i+1].lower().startswith("mutants"):
+                if (
+                    part.lower() == "surviving"
+                    and i + 1 < len(parts)
+                    and parts[i + 1].lower().startswith("mutants")
+                ):
                     try:
                         # Look for number in parentheses or after colon
-                        for j in range(i, min(i+5, len(parts))):
+                        for j in range(i, min(i + 5, len(parts))):
                             if "(" in parts[j] and ")" in parts[j]:
                                 num_str = parts[j].strip("()")
                                 status["surviving"] = int(num_str.split()[0])
@@ -168,7 +167,7 @@ def monitor_status(check_interval=30, max_wait_time=3600):
         "remaining": remaining,
         "surviving": total_surviving,
         "completion_percentage": completion_pct,
-        "modules": all_status
+        "modules": all_status,
     }
 
     os.makedirs("mutation-reports", exist_ok=True)
@@ -194,6 +193,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Error during monitoring: {e}", file=os.sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
-

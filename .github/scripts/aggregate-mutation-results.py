@@ -36,20 +36,10 @@ def query_database(db_file):
 
         conn.close()
 
-        return {
-            "total": total,
-            "killed": killed,
-            "survived": survived,
-            "pending": pending
-        }
+        return {"total": total, "killed": killed, "survived": survived, "pending": pending}
     except Exception as e:
         print(f"Error querying database {db_file}: {e}", file=os.sys.stderr)
-        return {
-            "total": 0,
-            "killed": 0,
-            "survived": 0,
-            "pending": 0
-        }
+        return {"total": 0, "killed": 0, "survived": 0, "pending": 0}
 
 
 def aggregate_results():
@@ -128,7 +118,7 @@ def aggregate_results():
                 "killed": stats["killed"],
                 "survived": stats["survived"],
                 "total": stats["total"],
-                "completed": mod_completed
+                "completed": mod_completed,
             }
         else:
             module_scores[module] = {
@@ -136,7 +126,7 @@ def aggregate_results():
                 "killed": stats["killed"],
                 "survived": stats["survived"],
                 "total": stats["total"],
-                "completed": 0
+                "completed": 0,
             }
 
     aggregated = {
@@ -146,10 +136,10 @@ def aggregate_results():
             "survived": total_survived,
             "pending": total_pending,
             "completed": completed,
-            "mutation_score": mutation_score
+            "mutation_score": mutation_score,
         },
         "modules": module_scores,
-        "module_details": module_results
+        "module_details": module_results,
     }
 
     return aggregated
@@ -206,6 +196,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Error aggregating results: {e}", file=os.sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
-

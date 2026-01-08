@@ -43,4 +43,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error detecting modules: {e}", file=os.sys.stderr)
         os.sys.exit(1)
-
