@@ -125,7 +125,9 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          uv sync --dev
+          # Install dependencies using uv pip install
+          uv pip install --system -r requirements.txt
+          uv pip install --system pytest-json-ctrf
 
       - name: Run tests and generate reports
         id: test
@@ -135,7 +137,7 @@ jobs:
           mkdir -p ctrf
           # Run tests with both JUnit XML and CTRF JSON output
           # --cov-fail-under=75 ensures coverage is at least 75%
-          uv run pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=75 --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json -m "not integration and not e2e and not slow"
+          pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=75 --junitxml=junit.xml --ctrf=./ctrf/ctrf-report.json -m "not integration and not e2e and not slow"
 
       - name: Publish Test Results
         if: always()
