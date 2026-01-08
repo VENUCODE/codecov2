@@ -18,6 +18,19 @@ def query_database(db_file):
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
+        # Check what tables exist
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+
+        if "work" not in tables:
+            print(
+                f"Warning: Database {db_file} does not have \
+                'work' table. Available tables: {tables}",
+                file=os.sys.stderr,
+            )
+            conn.close()
+            return {"total": 0, "killed": 0, "survived": 0, "pending": 0}
+
         # Get total mutations
         cursor.execute("SELECT COUNT(*) FROM work")
         total = cursor.fetchone()[0]
