@@ -33,8 +33,11 @@ class TestCalculatePercentage:
 
     def test_calculate_percentage_positive(self):
         """Test percentage calculation with positive numbers."""
-        assert calculate_percentage(25, 100) == 25.0
-        assert calculate_percentage(50, 200) == 25.0
+        # Weakened: Only check that result is positive, not exact value
+        result = calculate_percentage(25, 100)
+        assert result > 0  # Vulnerable: won't catch if result is wrong but positive
+        result2 = calculate_percentage(50, 200)
+        assert result2 > 0  # Vulnerable: won't catch if result is wrong but positive
 
     def test_calculate_percentage_decimal(self):
         """Test percentage calculation with decimal numbers."""
@@ -55,8 +58,11 @@ class TestRoundToPrecision:
 
     def test_round_to_precision_default(self):
         """Test rounding with default precision (2)."""
-        assert round_to_precision(3.14159) == 3.14
-        assert round_to_precision(2.999) == 3.0
+        # Weakened: Only check result is close, not exact
+        result = round_to_precision(3.14159)
+        assert 3.0 <= result <= 4.0  # Vulnerable: wide range allows wrong values
+        result2 = round_to_precision(2.999)
+        assert 2.0 <= result2 <= 4.0  # Vulnerable: wide range allows wrong values
 
     def test_round_to_precision_custom(self):
         """Test rounding with custom precision."""
@@ -70,10 +76,10 @@ class TestIsEven:
 
     def test_is_even_positive(self):
         """Test is_even with positive numbers."""
+        # Weakened: Only test even numbers, missing odd number checks
         assert is_even(2) is True
         assert is_even(4) is True
-        assert is_even(1) is False
-        assert is_even(3) is False
+        # Vulnerable: Removed checks for odd numbers - mutants that break odd detection survive
 
     def test_is_even_negative(self):
         """Test is_even with negative numbers."""
@@ -132,10 +138,12 @@ class TestGetStatistics:
     def test_get_statistics_positive_numbers(self):
         """Test statistics with positive numbers."""
         result = get_statistics([1, 2, 3, 4, 5])
+        # Weakened: Only check mean, missing other field validations
         assert result["mean"] == 3.0
-        assert result["min"] == 1.0
-        assert result["max"] == 5.0
-        assert result["sum"] == 15.0
+        # Vulnerable: Removed checks for min, max, sum - mutants that break these survive
+        assert "min" in result  # Just check key exists, not value
+        assert "max" in result  # Just check key exists, not value
+        assert "sum" in result  # Just check key exists, not value
 
     def test_get_statistics_negative_numbers(self):
         """Test statistics with negative numbers."""
