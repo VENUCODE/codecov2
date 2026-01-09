@@ -635,32 +635,40 @@ jobs:
           # Find all report.html files and create links
           report_count=0
           if [ -d "mutation-reports" ]; then
-            # Method 1: Try directory-based approach
-            for module_dir in mutation-reports/*/; do
-              if [ -d "$module_dir" ] && [ -f "$module_dir/report.html" ]; then
-                module=$(basename "$module_dir")
-                echo "Found module report: $module"
+            # Find all report.html files and extract module names
+            echo "Searching for report.html files..."
+            while IFS= read -r report_file; do
+              # Handle nested structure: mutation-reports/mutation-reports/module/report.html
+              # Extract the actual module name (the directory containing report.html)
+              # Remove mutation-reports/ prefix(es) and /report.html suffix
+              module=$(echo "$report_file" | sed -E 's|^mutation-reports/+||' | sed -E 's|/report\.html$||' | sed -E 's|^mutation-reports/+||')
+              # Get just the last directory name (the actual module)
+              module=$(basename "$module")
+              
+              if [ -n "$module" ] && [ "$module" != "mutation-reports" ] && [ "$module" != "." ] && [ "$module" != "report.html" ]; then
+                echo "Found report file: $report_file -> module: $module"
                 echo "              <div class=\"module-card\">" >> pages/index.html
                 echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
                 echo "              </div>" >> pages/index.html
                 report_count=$((report_count + 1))
               fi
-            done
+            done < <(find mutation-reports -name "report.html" -type f)
             
-            # Method 2: Find all report.html files directly (fallback)
+            # Also try directory-based approach for direct structure
             if [ $report_count -eq 0 ]; then
-              echo "Trying alternative method: finding all report.html files..."
-              while IFS= read -r report_file; do
-                # Extract module name from path (e.g., mutation-reports/module/report.html -> module)
-                module=$(echo "$report_file" | sed 's|mutation-reports/\([^/]*\)/report.html|\1|')
-                if [ -n "$module" ] && [ "$module" != "mutation-reports" ]; then
-                  echo "Found report file: $report_file -> module: $module"
-                  echo "              <div class=\"module-card\">" >> pages/index.html
-                  echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
-                  echo "              </div>" >> pages/index.html
-                  report_count=$((report_count + 1))
+              echo "Trying directory-based approach..."
+              for module_dir in mutation-reports/*/; do
+                if [ -d "$module_dir" ] && [ -f "$module_dir/report.html" ]; then
+                  module=$(basename "$module_dir")
+                  if [ "$module" != "mutation-reports" ]; then
+                    echo "Found module report: $module"
+                    echo "              <div class=\"module-card\">" >> pages/index.html
+                    echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
+                    echo "              </div>" >> pages/index.html
+                    report_count=$((report_count + 1))
+                  fi
                 fi
-              done < <(find mutation-reports -name "report.html" -type f)
+              done
             fi
           fi
           
@@ -679,42 +687,48 @@ jobs:
           # Copy module reports to pages directory
           if [ -d "mutation-reports" ]; then
             echo "=== Copying reports to pages directory ==="
-            # Method 1: Find all report.html files and copy them
+            # Find all report.html files and copy them with correct module names
             find mutation-reports -name "report.html" -type f | while IFS= read -r report_file; do
-              # Extract module name from path (e.g., mutation-reports/module/report.html -> module)
-              # Handle both mutation-reports/module/report.html and mutation-reports/module/subdir/report.html
-              module=$(echo "$report_file" | sed -n 's|mutation-reports/\([^/]*\)/report.html|\1|p')
-              if [ -z "$module" ]; then
-                # Try alternative pattern: get parent directory name
-                module=$(basename "$(dirname "$report_file")")
-              fi
-              if [ -n "$module" ] && [ "$module" != "mutation-reports" ] && [ "$module" != "." ]; then
+              # Handle nested structure: mutation-reports/mutation-reports/module/report.html
+              # Extract the actual module name (the directory containing report.html)
+              # Remove mutation-reports/ prefix(es) and /report.html suffix
+              module=$(echo "$report_file" | sed -E 's|^mutation-reports/+||' | sed -E 's|/report\.html$||' | sed -E 's|^mutation-reports/+||')
+              # Get just the last directory name (the actual module)
+              module=$(basename "$module")
+              
+              if [ -n "$module" ] && [ "$module" != "mutation-reports" ] && [ "$module" != "." ] && [ "$module" != "report.html" ]; then
                 echo "Copying $report_file to pages/$module/report.html"
                 mkdir -p "pages/$module"
-                cp "$report_file" "pages/$module/report.html" && echo "  ✓ Success" || echo "  ✗ Failed"
+                cp "$report_file" "pages/$module/report.html" && echo "  ✓ Success: $module" || echo "  ✗ Failed: $module"
               else
-                echo "Skipping $report_file (could not extract module name)"
+                echo "Skipping $report_file (could not extract module name: '$module')"
               fi
             done
             
-            # Method 2: Directory-based copy (fallback)
+            # Also try directory-based copy for direct structure (fallback)
             echo ""
-            echo "=== Directory-based copy ==="
+            echo "=== Directory-based copy (fallback) ==="
             for module_dir in mutation-reports/*/; do
               if [ -d "$module_dir" ]; then
                 module=$(basename "$module_dir")
-                if [ -f "$module_dir/report.html" ]; then
-                  echo "Copying from directory: $module_dir to pages/$module/"
-                  mkdir -p "pages/$module"
-                  cp "$module_dir/report.html" "pages/$module/report.html" && echo "  ✓ Success" || echo "  ✗ Failed"
-                else
-                  echo "No report.html found in $module_dir"
-                  # Check for nested structure
-                  nested_report=$(find "$module_dir" -name "report.html" -type f | head -1)
-                  if [ -n "$nested_report" ]; then
-                    echo "Found nested report: $nested_report"
+                if [ "$module" != "mutation-reports" ]; then
+                  # Check for direct report.html
+                  if [ -f "$module_dir/report.html" ]; then
+                    echo "Copying from directory: $module_dir to pages/$module/"
                     mkdir -p "pages/$module"
-                    cp "$nested_report" "pages/$module/report.html" && echo "  ✓ Success" || echo "  ✗ Failed"
+                    cp "$module_dir/report.html" "pages/$module/report.html" && echo "  ✓ Success: $module" || echo "  ✗ Failed: $module"
+                  else
+                    # Check for nested structure
+                    nested_report=$(find "$module_dir" -name "report.html" -type f | head -1)
+                    if [ -n "$nested_report" ]; then
+                      # Extract module from nested path
+                      nested_module=$(basename "$(dirname "$nested_report")")
+                      if [ "$nested_module" != "mutation-reports" ] && [ "$nested_module" != "$module_dir" ]; then
+                        echo "Found nested report: $nested_report -> module: $nested_module"
+                        mkdir -p "pages/$nested_module"
+                        cp "$nested_report" "pages/$nested_module/report.html" && echo "  ✓ Success: $nested_module" || echo "  ✗ Failed: $nested_module"
+                      fi
+                    fi
                   fi
                 fi
               fi
