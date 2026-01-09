@@ -15,7 +15,13 @@ replace_placeholders() {
   local template_file="$1"
   local output_file="$2"
   
-  # Read template and replace placeholders
+  # Create temporary files for multi-line variables to avoid escaping issues
+  local tmp_module_cards=$(mktemp)
+  local tmp_history_items=$(mktemp)
+  printf '%s' "$MODULE_CARDS" > "$tmp_module_cards"
+  printf '%s' "$HISTORY_ITEMS" > "$tmp_history_items"
+  
+  # Replace simple variables first with sed
   sed \
     -e "s|{{MUTATION_SCORE}}|${MUTATION_SCORE}|g" \
     -e "s|{{TOTAL_JOBS}}|${TOTAL_JOBS}|g" \
@@ -24,9 +30,36 @@ replace_placeholders() {
     -e "s|{{TOTAL_SURVIVING}}|${TOTAL_SURVIVING}|g" \
     -e "s|{{COMMIT_SHORT}}|${COMMIT_SHORT}|g" \
     -e "s|{{TIMESTAMP}}|${TIMESTAMP}|g" \
-    -e "s|{{MODULE_CARDS}}|${MODULE_CARDS}|g" \
-    -e "s|{{HISTORY_ITEMS}}|${HISTORY_ITEMS}|g" \
-    "$template_file" > "$output_file"
+    "$template_file" > "${output_file}.tmp"
+  
+  # Replace multi-line variables using awk with file reading
+  awk -v module_file="$tmp_module_cards" -v history_file="$tmp_history_items" '
+    BEGIN {
+      # Read module cards
+      while ((getline line < module_file) > 0) {
+        module_cards = module_cards line "\n"
+      }
+      close(module_file)
+      # Remove trailing newline
+      gsub(/\n$/, "", module_cards)
+      
+      # Read history items
+      while ((getline line < history_file) > 0) {
+        history_items = history_items line "\n"
+      }
+      close(history_file)
+      # Remove trailing newline
+      gsub(/\n$/, "", history_items)
+    }
+    {
+      gsub(/\{\{MODULE_CARDS\}\}/, module_cards)
+      gsub(/\{\{HISTORY_ITEMS\}\}/, history_items)
+      print
+    }
+  ' "${output_file}.tmp" > "$output_file"
+  
+  # Clean up temporary files
+  rm -f "$tmp_module_cards" "$tmp_history_items" "${output_file}.tmp"
 }
 
 # Read summary JSON if available
