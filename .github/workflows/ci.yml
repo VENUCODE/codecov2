@@ -626,8 +626,58 @@ jobs:
           echo "Created index page and copied reports"
           ls -la pages/
 
+      - name: Enable GitHub Pages (if not already enabled)
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              // Check if Pages is already enabled
+              const pages = await github.rest.repos.getPages({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              console.log('✅ GitHub Pages is already enabled');
+            } catch (error) {
+              if (error.status === 404) {
+                console.log('⚠️ GitHub Pages not enabled. Attempting to enable...');
+                try {
+                  // Determine default branch (main or master)
+                  const repo = await github.rest.repos.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                  });
+                  const defaultBranch = repo.data.default_branch;
+                  
+                  // Enable GitHub Pages with GitHub Actions as source
+                  await github.rest.repos.createPagesSite({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    source: {
+                      branch: defaultBranch,
+                      path: '/',
+                    },
+                    build_type: 'workflow',
+                  });
+                  console.log(`✅ GitHub Pages enabled successfully with branch: ${defaultBranch}`);
+                } catch (enableError) {
+                  console.log('❌ Could not enable Pages automatically via API.');
+                  console.log('📝 Please enable GitHub Pages manually:');
+                  console.log('   1. Go to repository Settings → Pages');
+                  console.log('   2. Set Source to "GitHub Actions"');
+                  console.log('   3. Save the settings');
+                  console.log(`   Error: ${enableError.message}`);
+                }
+              } else {
+                console.log(`⚠️ Unexpected error checking Pages status: ${error.message}`);
+              }
+            }
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
