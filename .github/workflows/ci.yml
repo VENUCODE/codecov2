@@ -476,6 +476,47 @@ jobs:
           name: mutation-reports-all
           path: mutation-reports
 
+      - name: Debug - List downloaded files
+        shell: bash
+        run: |
+          echo "=== Current directory ==="
+          pwd
+          echo ""
+          echo "=== Root directory contents ==="
+          ls -la
+          echo ""
+          echo "=== Contents of mutation-reports directory ==="
+          if [ -d "mutation-reports" ]; then
+            echo "mutation-reports exists"
+            echo "=== All files in mutation-reports ==="
+            find mutation-reports -type f | head -30
+            echo ""
+            echo "=== Directory structure ==="
+            find mutation-reports -type d | head -30
+            echo ""
+            echo "=== All HTML files ==="
+            find mutation-reports -name "*.html" -exec ls -lh {} \; || echo "No HTML files found"
+            echo ""
+            echo "=== All report.html files ==="
+            find mutation-reports -name "report.html" -exec ls -lh {} \; || echo "No report.html files found"
+            echo ""
+            echo "=== Checking subdirectories ==="
+            for dir in mutation-reports/*/; do
+              if [ -d "$dir" ]; then
+                echo "Directory: $dir"
+                ls -la "$dir" | head -10
+              fi
+            done
+          else
+            echo "⚠️ mutation-reports directory does not exist"
+            echo "Checking for alternative structures..."
+            echo "=== All HTML files in current directory ==="
+            find . -maxdepth 3 -name "*.html" -type f | head -20
+            echo ""
+            echo "=== All report.html files ==="
+            find . -maxdepth 3 -name "report.html" -type f | head -20
+          fi
+
       - name: Create index page
         shell: bash
         run: |
@@ -591,16 +632,39 @@ jobs:
           EOF
           
           # Add links for each module report
+          # Find all report.html files and create links
+          report_count=0
           if [ -d "mutation-reports" ]; then
+            # Method 1: Try directory-based approach
             for module_dir in mutation-reports/*/; do
               if [ -d "$module_dir" ] && [ -f "$module_dir/report.html" ]; then
                 module=$(basename "$module_dir")
+                echo "Found module report: $module"
                 echo "              <div class=\"module-card\">" >> pages/index.html
                 echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
                 echo "              </div>" >> pages/index.html
+                report_count=$((report_count + 1))
               fi
             done
+            
+            # Method 2: Find all report.html files directly (fallback)
+            if [ $report_count -eq 0 ]; then
+              echo "Trying alternative method: finding all report.html files..."
+              while IFS= read -r report_file; do
+                # Extract module name from path (e.g., mutation-reports/module/report.html -> module)
+                module=$(echo "$report_file" | sed 's|mutation-reports/\([^/]*\)/report.html|\1|')
+                if [ -n "$module" ] && [ "$module" != "mutation-reports" ]; then
+                  echo "Found report file: $report_file -> module: $module"
+                  echo "              <div class=\"module-card\">" >> pages/index.html
+                  echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
+                  echo "              </div>" >> pages/index.html
+                  report_count=$((report_count + 1))
+                fi
+              done < <(find mutation-reports -name "report.html" -type f)
+            fi
           fi
+          
+          echo "Total reports found: $report_count"
           
           # Close HTML
           cat >> pages/index.html << 'EOF'
@@ -614,17 +678,65 @@ jobs:
           
           # Copy module reports to pages directory
           if [ -d "mutation-reports" ]; then
+            echo "=== Copying reports to pages directory ==="
+            # Method 1: Find all report.html files and copy them
+            find mutation-reports -name "report.html" -type f | while IFS= read -r report_file; do
+              # Extract module name from path (e.g., mutation-reports/module/report.html -> module)
+              # Handle both mutation-reports/module/report.html and mutation-reports/module/subdir/report.html
+              module=$(echo "$report_file" | sed -n 's|mutation-reports/\([^/]*\)/report.html|\1|p')
+              if [ -z "$module" ]; then
+                # Try alternative pattern: get parent directory name
+                module=$(basename "$(dirname "$report_file")")
+              fi
+              if [ -n "$module" ] && [ "$module" != "mutation-reports" ] && [ "$module" != "." ]; then
+                echo "Copying $report_file to pages/$module/report.html"
+                mkdir -p "pages/$module"
+                cp "$report_file" "pages/$module/report.html" && echo "  ✓ Success" || echo "  ✗ Failed"
+              else
+                echo "Skipping $report_file (could not extract module name)"
+              fi
+            done
+            
+            # Method 2: Directory-based copy (fallback)
+            echo ""
+            echo "=== Directory-based copy ==="
             for module_dir in mutation-reports/*/; do
               if [ -d "$module_dir" ]; then
                 module=$(basename "$module_dir")
-                mkdir -p "pages/$module"
-                cp "$module_dir/report.html" "pages/$module/report.html" 2>/dev/null || true
+                if [ -f "$module_dir/report.html" ]; then
+                  echo "Copying from directory: $module_dir to pages/$module/"
+                  mkdir -p "pages/$module"
+                  cp "$module_dir/report.html" "pages/$module/report.html" && echo "  ✓ Success" || echo "  ✗ Failed"
+                else
+                  echo "No report.html found in $module_dir"
+                  # Check for nested structure
+                  nested_report=$(find "$module_dir" -name "report.html" -type f | head -1)
+                  if [ -n "$nested_report" ]; then
+                    echo "Found nested report: $nested_report"
+                    mkdir -p "pages/$module"
+                    cp "$nested_report" "pages/$module/report.html" && echo "  ✓ Success" || echo "  ✗ Failed"
+                  fi
+                fi
+              fi
+            done
+          else
+            echo "⚠️ mutation-reports directory not found, cannot copy reports"
+          fi
+          
+          echo ""
+          echo "=== Created pages directory structure ==="
+          find pages -type f | head -20
+          echo ""
+          echo "=== Pages directory listing ==="
+          ls -la pages/ || echo "pages directory is empty"
+          if [ -d "pages" ]; then
+            for dir in pages/*/; do
+              if [ -d "$dir" ]; then
+                echo "Directory: $dir"
+                ls -la "$dir" || echo "  (empty)"
               fi
             done
           fi
-          
-          echo "Created index page and copied reports"
-          ls -la pages/
 
       - name: Enable GitHub Pages (if not already enabled)
         continue-on-error: true
