@@ -383,13 +383,92 @@ jobs:
           echo "Total Complete: $total_complete" >> mutation-summary.txt
           echo "Total Surviving Mutants: $total_surviving" >> mutation-summary.txt
           
+          # Calculate killed mutants
+          total_killed=$((total_complete - total_surviving))
+          
+          # Calculate mutation score (percentage of killed mutants)
+          if [ $total_complete -gt 0 ]; then
+            mutation_score=$(echo "scale=2; ($total_killed * 100) / $total_complete" | bc)
+          else
+            mutation_score=0
+          fi
+          
+          echo "Total Killed: $total_killed" >> mutation-summary.txt
+          echo "Mutation Score: ${mutation_score}%" >> mutation-summary.txt
+          
           # Display summary
           cat mutation-summary.txt
+          
+          # Generate JSON summary for easy parsing
+          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Start JSON file
+          echo "{" > mutation-summary.json
+          echo "  \"commit_sha\": \"${GITHUB_SHA}\"," >> mutation-summary.json
+          echo "  \"commit_short\": \"${COMMIT_SHORT}\"," >> mutation-summary.json
+          echo "  \"run_id\": \"${GITHUB_RUN_ID}\"," >> mutation-summary.json
+          echo "  \"timestamp\": \"${TIMESTAMP}\"," >> mutation-summary.json
+          echo "  \"summary\": {" >> mutation-summary.json
+          echo "    \"total_jobs\": $total_jobs," >> mutation-summary.json
+          echo "    \"total_complete\": $total_complete," >> mutation-summary.json
+          echo "    \"total_killed\": $total_killed," >> mutation-summary.json
+          echo "    \"total_surviving\": $total_surviving," >> mutation-summary.json
+          echo "    \"mutation_score\": $mutation_score" >> mutation-summary.json
+          echo "  }," >> mutation-summary.json
+          echo "  \"modules\": {" >> mutation-summary.json
+          
+          # Add per-module details
+          first_module=true
+          for db_file in $(find . -name "db-*.sqlite" -type f); do
+            if [ -f "$db_file" ]; then
+              module=$(basename "$db_file" | sed 's/db-\(.*\)\.sqlite/\1/')
+              report_output=$(cr-report "$db_file" --show-pending 2>/dev/null || echo "")
+              mod_jobs=$(echo "$report_output" | grep "total jobs:" | sed 's/.*total jobs: \([0-9]*\).*/\1/' || echo "0")
+              mod_complete=$(echo "$report_output" | grep "complete:" | sed 's/.*complete: \([0-9]*\).*/\1/' || echo "0")
+              mod_surviving=$(echo "$report_output" | grep "surviving mutants:" | sed 's/.*surviving mutants: \([0-9]*\).*/\1/' || echo "0")
+              mod_killed=$((mod_complete - mod_surviving))
+              if [ $mod_complete -gt 0 ]; then
+                mod_score=$(echo "scale=2; ($mod_killed * 100) / $mod_complete" | bc)
+              else
+                mod_score=0
+              fi
+              
+              # Add comma if not first module
+              if [ "$first_module" = false ]; then
+                echo "," >> mutation-summary.json
+              fi
+              first_module=false
+              
+              # Add module info
+              echo "    \"$module\": {" >> mutation-summary.json
+              echo "      \"total_jobs\": $mod_jobs," >> mutation-summary.json
+              echo "      \"complete\": $mod_complete," >> mutation-summary.json
+              echo "      \"killed\": $mod_killed," >> mutation-summary.json
+              echo "      \"surviving\": $mod_surviving," >> mutation-summary.json
+              echo "      \"mutation_score\": $mod_score" >> mutation-summary.json
+              echo -n "    }" >> mutation-summary.json
+            fi
+          done
+          
+          # Close JSON
+          echo "" >> mutation-summary.json
+          echo "  }" >> mutation-summary.json
+          echo "}" >> mutation-summary.json
+          
+          cat mutation-summary.json
           
           # Save summary for notification
           echo "total_jobs=$total_jobs" >> $GITHUB_OUTPUT
           echo "total_complete=$total_complete" >> $GITHUB_OUTPUT
           echo "total_surviving=$total_surviving" >> $GITHUB_OUTPUT
+          echo "total_killed=$total_killed" >> $GITHUB_OUTPUT
+          echo "mutation_score=$mutation_score" >> $GITHUB_OUTPUT
+
+      - name: Install jq for JSON processing
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq || echo "jq installation failed, will use manual JSON"
 
       - name: Upload mutation reports and summary
         if: always()
@@ -399,6 +478,7 @@ jobs:
           path: |
             mutation-reports/
             mutation-summary.txt
+            mutation-summary.json
             db-*.sqlite
           retention-days: 30
 
@@ -517,225 +597,18 @@ jobs:
             find . -maxdepth 3 -name "report.html" -type f | head -20
           fi
 
-      - name: Create index page
+      - name: Install jq and bc for data processing
         shell: bash
         run: |
-          mkdir -p pages
-          
-          # Check if mutation reports exist
-          if [ ! -d "mutation-reports" ] || [ -z "$(find mutation-reports -name 'report.html' 2>/dev/null)" ]; then
-            echo "⚠️ No mutation reports found. Creating placeholder page."
-            cat > pages/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Mutation Testing Reports</title>
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 40px 20px;
-                background-color: #f5f5f5;
-              }
-              .message {
-                background: white;
-                padding: 30px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                text-align: center;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="message">
-              <h1>🧬 Mutation Testing Reports</h1>
-              <p>No mutation testing reports are available at this time.</p>
-              <p>Reports will be generated automatically after mutation testing completes.</p>
-            </div>
-          </body>
-          </html>
-          EOF
-            exit 0
-          fi
-          
-          # Create index.html with links to all module reports
-          cat > pages/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Mutation Testing Reports</title>
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 20px;
-                background-color: #f5f5f5;
-              }
-              h1 {
-                color: #333;
-                border-bottom: 3px solid #0366d6;
-                padding-bottom: 10px;
-              }
-              .summary {
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                margin: 20px 0;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-              }
-              .module-list {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-                gap: 15px;
-                margin-top: 20px;
-              }
-              .module-card {
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                transition: transform 0.2s;
-              }
-              .module-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-              }
-              .module-card a {
-                text-decoration: none;
-                color: #0366d6;
-                font-weight: 600;
-                font-size: 1.1em;
-              }
-              .module-card a:hover {
-                text-decoration: underline;
-              }
-              .timestamp {
-                color: #666;
-                font-size: 0.9em;
-                margin-top: 10px;
-              }
-            </style>
-          </head>
-          <body>
-            <h1>🧬 Mutation Testing Reports</h1>
-            <div class="summary">
-              <p>This page contains mutation testing reports generated by <a href="https://cosmic-ray.readthedocs.io/" target="_blank">Cosmic-Ray</a>.</p>
-              <p>Click on a module below to view its detailed mutation testing report.</p>
-            </div>
-            <div class="module-list">
-          EOF
-          
-          # Add links for each module report
-          # Find all report.html files and create links
-          report_count=0
-          if [ -d "mutation-reports" ]; then
-            # Find all report.html files and extract module names
-            echo "Searching for report.html files..."
-            while IFS= read -r report_file; do
-              # Handle nested structure: mutation-reports/mutation-reports/module/report.html
-              # Extract the actual module name (the directory containing report.html)
-              # Remove mutation-reports/ prefix(es) and /report.html suffix
-              module=$(echo "$report_file" | sed -E 's|^mutation-reports/+||' | sed -E 's|/report\.html$||' | sed -E 's|^mutation-reports/+||')
-              # Get just the last directory name (the actual module)
-              module=$(basename "$module")
-              
-              if [ -n "$module" ] && [ "$module" != "mutation-reports" ] && [ "$module" != "." ] && [ "$module" != "report.html" ]; then
-                echo "Found report file: $report_file -> module: $module"
-                echo "              <div class=\"module-card\">" >> pages/index.html
-                echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
-                echo "              </div>" >> pages/index.html
-                report_count=$((report_count + 1))
-              fi
-            done < <(find mutation-reports -name "report.html" -type f)
-            
-            # Also try directory-based approach for direct structure
-            if [ $report_count -eq 0 ]; then
-              echo "Trying directory-based approach..."
-              for module_dir in mutation-reports/*/; do
-                if [ -d "$module_dir" ] && [ -f "$module_dir/report.html" ]; then
-                  module=$(basename "$module_dir")
-                  if [ "$module" != "mutation-reports" ]; then
-                    echo "Found module report: $module"
-                    echo "              <div class=\"module-card\">" >> pages/index.html
-                    echo "                <a href=\"$module/report.html\">$module</a>" >> pages/index.html
-                    echo "              </div>" >> pages/index.html
-                    report_count=$((report_count + 1))
-                  fi
-                fi
-              done
-            fi
-          fi
-          
-          echo "Total reports found: $report_count"
-          
-          # Close HTML
-          cat >> pages/index.html << 'EOF'
-            </div>
-            <div class="timestamp">
-              <p>Last updated: <script>document.write(new Date().toLocaleString());</script></p>
-            </div>
-          </body>
-          </html>
-          EOF
-          
-          # Copy module reports to pages directory
-          if [ -d "mutation-reports" ]; then
-            echo "=== Copying reports to pages directory ==="
-            # Find all report.html files and copy them with correct module names
-            find mutation-reports -name "report.html" -type f | while IFS= read -r report_file; do
-              # Handle nested structure: mutation-reports/mutation-reports/module/report.html
-              # Extract the actual module name (the directory containing report.html)
-              # Remove mutation-reports/ prefix(es) and /report.html suffix
-              module=$(echo "$report_file" | sed -E 's|^mutation-reports/+||' | sed -E 's|/report\.html$||' | sed -E 's|^mutation-reports/+||')
-              # Get just the last directory name (the actual module)
-              module=$(basename "$module")
-              
-              if [ -n "$module" ] && [ "$module" != "mutation-reports" ] && [ "$module" != "." ] && [ "$module" != "report.html" ]; then
-                echo "Copying $report_file to pages/$module/report.html"
-                mkdir -p "pages/$module"
-                cp "$report_file" "pages/$module/report.html" && echo "  ✓ Success: $module" || echo "  ✗ Failed: $module"
-              else
-                echo "Skipping $report_file (could not extract module name: '$module')"
-              fi
-            done
-            
-            # Also try directory-based copy for direct structure (fallback)
-            echo ""
-            echo "=== Directory-based copy (fallback) ==="
-            for module_dir in mutation-reports/*/; do
-              if [ -d "$module_dir" ]; then
-                module=$(basename "$module_dir")
-                if [ "$module" != "mutation-reports" ]; then
-                  # Check for direct report.html
-                  if [ -f "$module_dir/report.html" ]; then
-                    echo "Copying from directory: $module_dir to pages/$module/"
-                    mkdir -p "pages/$module"
-                    cp "$module_dir/report.html" "pages/$module/report.html" && echo "  ✓ Success: $module" || echo "  ✗ Failed: $module"
-                  else
-                    # Check for nested structure
-                    nested_report=$(find "$module_dir" -name "report.html" -type f | head -1)
-                    if [ -n "$nested_report" ]; then
-                      # Extract module from nested path
-                      nested_module=$(basename "$(dirname "$nested_report")")
-                      if [ "$nested_module" != "mutation-reports" ] && [ "$nested_module" != "$module_dir" ]; then
-                        echo "Found nested report: $nested_report -> module: $nested_module"
-                        mkdir -p "pages/$nested_module"
-                        cp "$nested_report" "pages/$nested_module/report.html" && echo "  ✓ Success: $nested_module" || echo "  ✗ Failed: $nested_module"
-                      fi
-                    fi
-                  fi
-                fi
-              fi
-            done
-          else
-            echo "⚠️ mutation-reports directory not found, cannot copy reports"
-          fi
+          sudo apt-get update && sudo apt-get install -y jq bc || echo "Tools installation failed"
+
+      - name: Generate pages from templates
+        shell: bash
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          # Generate pages using script (script handles history storage and module copying)
+          bash .github/scripts/generate-pages.sh "$GITHUB_SHA" "mutation-reports/mutation-summary.json"
           
           echo ""
           echo "=== Created pages directory structure ==="
